@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Agent, Kind, Overview, Profile } from "@/bindings";
 import { agentApi } from "@/lib/agent-api";
 
@@ -42,6 +50,11 @@ function useHarnessState(): HarnessContextValue {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const agentRef = useRef(agent);
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
+
   const [query, setQuery] = useState("");
   const [notice, setNoticeState] = useState("");
   const [dialog, setDialog] = useState<DialogKind | null>(null);
@@ -55,11 +68,12 @@ function useHarnessState(): HarnessContextValue {
   }, []);
 
   const refresh = useCallback(async () => {
+    const requested = agent;
     setLoading(true);
     setError(null);
     try {
-      const ov = await agentApi.overview(agent);
-      setOverview(ov);
+      const ov = await agentApi.overview(requested);
+      if (agentRef.current === requested) setOverview(ov);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -83,12 +97,13 @@ function useHarnessState(): HarnessContextValue {
 
   const mutate = useCallback(
     async (action: () => Promise<void>) => {
+      const requested = agent;
       setLoading(true);
       setError(null);
       try {
         await action();
-        const ov = await agentApi.overview(agent);
-        setOverview(ov);
+        const ov = await agentApi.overview(requested);
+        if (agentRef.current === requested) setOverview(ov);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {

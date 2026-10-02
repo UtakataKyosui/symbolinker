@@ -25,9 +25,14 @@ export const Route = createFileRoute("/hooks")({
 
 const HOOK_EVENTS = ["PreToolUse", "PostToolUse", "PreCompact", "Notification", "Stop"] as const;
 
+const TIMEOUT_MAX = 4_294_967_295;
+const ORDER_MIN = -2_147_483_648;
+const ORDER_MAX = 2_147_483_647;
+
 function HooksPage() {
-  const { agent, overview, saveProfile, query, setQuery } = useHarness();
+  const { agent, overview, loading, saveProfile, query, setQuery } = useHarness();
   const [inspected, setInspected] = useState<string | undefined>();
+  const [metaVersion, setMetaVersion] = useState(0);
 
   const active = overview?.profiles.find((p) => p.name === overview.active) ?? null;
   const allHooks = overview?.library.hooks ?? [];
@@ -105,6 +110,8 @@ function HooksPage() {
                       agent={agent}
                       name={name}
                       enabled={enabled}
+                      disabled={loading}
+                      metaVersion={metaVersion}
                       inspected={inspected === name}
                       onInspect={() => setInspected(inspected === name ? undefined : name)}
                       onToggle={(v) => void handleToggle(name, v)}
@@ -116,7 +123,12 @@ function HooksPage() {
           )}
         </Panel>
         {inspected && (
-          <HookInspector agent={agent} name={inspected} onClose={() => setInspected(undefined)} />
+          <HookInspector
+            agent={agent}
+            name={inspected}
+            onClose={() => setInspected(undefined)}
+            onSaved={() => setMetaVersion((v) => v + 1)}
+          />
         )}
       </div>
     </>
@@ -127,6 +139,8 @@ function HookRow({
   agent,
   name,
   enabled,
+  disabled,
+  metaVersion,
   inspected,
   onInspect,
   onToggle,
@@ -134,6 +148,8 @@ function HookRow({
   agent: Agent;
   name: string;
   enabled: boolean;
+  disabled: boolean;
+  metaVersion: number;
   inspected: boolean;
   onInspect: () => void;
   onToggle: (v: boolean) => void;
@@ -141,11 +157,19 @@ function HookRow({
   const [meta, setMeta] = useState<HookMeta | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     agentApi
       .getHookMeta(agent, name)
-      .then(setMeta)
-      .catch(() => setMeta(null));
-  }, [agent, name]);
+      .then((m) => {
+        if (!cancelled) setMeta(m);
+      })
+      .catch(() => {
+        if (!cancelled) setMeta(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent, name, metaVersion]);
 
   return (
     <TableRow className={inspected ? "selected-row" : ""}>
@@ -175,7 +199,12 @@ function HookRow({
         </span>
       </TableCell>
       <TableCell>
-        <Switch aria-label={`Enable ${name}`} checked={enabled} onCheckedChange={onToggle} />
+        <Switch
+          aria-label={`Enable ${name}`}
+          checked={enabled}
+          disabled={disabled}
+          onCheckedChange={onToggle}
+        />
       </TableCell>
     </TableRow>
   );
@@ -193,25 +222,59 @@ function HookInspector({
   agent,
   name,
   onClose,
+  onSaved,
 }: {
   agent: Agent;
   name: string;
   onClose: () => void;
+  onSaved: () => void;
 }) {
   const [meta, setMeta] = useState<HookMeta>(EMPTY_META);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedOk, setSavedOk] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setMeta(EMPTY_META);
+    setSaveError(null);
+    setSavedOk(false);
     agentApi
       .getHookMeta(agent, name)
-      .then(setMeta)
+      .then((m) => {
+        if (!cancelled) setMeta(m);
+      })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [agent, name]);
 
+  function validateMeta(): string | null {
+    if (meta.timeout !== null && (meta.timeout < 0 || meta.timeout > TIMEOUT_MAX)) {
+      return `Timeout must be 0–${TIMEOUT_MAX}`;
+    }
+    if (meta.order !== null && (meta.order < ORDER_MIN || meta.order > ORDER_MAX)) {
+      return `Order must be ${ORDER_MIN}–${ORDER_MAX}`;
+    }
+    return null;
+  }
+
   async function handleSave() {
+    const err = validateMeta();
+    if (err) {
+      setSaveError(err);
+      return;
+    }
     setSaving(true);
+    setSaveError(null);
+    setSavedOk(false);
     try {
       await agentApi.saveHookMeta(agent, name, meta);
+      setSavedOk(true);
+      onSaved();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -262,6 +325,7 @@ function HookInspector({
             className="h-6 text-xs w-24"
             type="number"
             min={0}
+            max={TIMEOUT_MAX}
             placeholder="—"
             value={meta.timeout ?? ""}
             onChange={(e) =>
@@ -274,6 +338,8 @@ function HookInspector({
           <Input
             className="h-6 text-xs w-24"
             type="number"
+            min={ORDER_MIN}
+            max={ORDER_MAX}
             placeholder="—"
             value={meta.order ?? ""}
             onChange={(e) =>
@@ -291,8 +357,11 @@ function HookInspector({
         value={meta.description ?? ""}
         onChange={(e) => setMeta((m) => ({ ...m, description: e.target.value || null }))}
       />
+      {saveError && <p className="text-xs text-amber mt-2">{saveError}</p>}
       <div className="inspector-bottom mt-4">
-        <Status tone={saving ? "muted" : "cyan"}>{saving ? "Saving…" : "Ready"}</Status>
+        <Status tone={savedOk ? "cyan" : "muted"}>
+          {savedOk ? "Saved" : saving ? "Saving…" : "Ready"}
+        </Status>
         <Button size="xs" onClick={() => void handleSave()} disabled={saving}>
           Save Metadata
         </Button>
