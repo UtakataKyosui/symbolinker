@@ -47,6 +47,10 @@ impl Layout {
         self.root.join("state.json")
     }
 
+    pub fn hook_meta_path(&self, name: &str) -> PathBuf {
+        self.root.join("meta").join("hooks").join(format!("{name}.json"))
+    }
+
     pub fn is_system(&self, kind: Kind, name: &str) -> bool {
         self.agent.system_entries(kind).contains(&name)
     }

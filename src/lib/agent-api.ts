@@ -1,4 +1,11 @@
-import { commands, type Agent, type Profile, type Kind, type Overview } from "@/bindings";
+import {
+  commands,
+  type Agent,
+  type HookMeta,
+  type Kind,
+  type Overview,
+  type Profile,
+} from "@/bindings";
 import { unwrapResult } from "@/lib/agent-result";
 
 /** Tauri コマンドを、失敗時に例外を投げる Promise へ変換するだけの層。状態は持たない。 */
@@ -22,5 +29,10 @@ export const agentApi = {
   },
   unlinkKind: async (agent: Agent, kind: Kind): Promise<void> => {
     unwrapResult(await commands.unlinkKind(agent, kind));
+  },
+  getHookMeta: async (agent: Agent, name: string): Promise<HookMeta> =>
+    unwrapResult(await commands.getHookMeta(agent, name)),
+  saveHookMeta: async (agent: Agent, name: string, meta: HookMeta): Promise<void> => {
+    unwrapResult(await commands.saveHookMeta(agent, name, meta));
   },
 };
