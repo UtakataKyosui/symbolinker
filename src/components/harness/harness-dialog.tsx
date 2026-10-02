@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useUIState } from "@/lib/ui-state-context";
 import { useAdopt, useImportUnmanaged, useSaveProfile } from "@/lib/use-overview";
+import { errorMessage } from "@/lib/agent-result";
 import type { Items } from "@/bindings";
 
 const EMPTY_ITEMS: Items = { skills: [], agents: [], hooks: [], rules: [] };
@@ -39,9 +40,13 @@ function AdoptDialog() {
   const adopt = useAdopt();
 
   async function handleAdopt() {
-    await adopt.mutateAsync();
-    setDialog(null);
-    setNotice("Agent adopted. Default profile created.");
+    try {
+      await adopt.mutateAsync();
+      setDialog(null);
+      setNotice("Agent adopted. Default profile created.");
+    } catch {
+      /* error shown via adopt.error below */
+    }
   }
 
   return (
@@ -53,6 +58,7 @@ function AdoptDialog() {
           create a default profile with everything enabled. This is a one-time operation per agent.
         </DialogDescription>
       </DialogHeader>
+      {adopt.error && <p className="text-xs text-amber mt-2">{errorMessage(adopt.error)}</p>}
       <DialogFooter>
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
@@ -71,9 +77,13 @@ function ImportDialog() {
   const importUnmanaged = useImportUnmanaged();
 
   async function handleImport() {
-    await importUnmanaged.mutateAsync();
-    setDialog(null);
-    setNotice("Unmanaged items imported into the active profile.");
+    try {
+      await importUnmanaged.mutateAsync();
+      setDialog(null);
+      setNotice("Unmanaged items imported into the active profile.");
+    } catch {
+      /* error shown via importUnmanaged.error below */
+    }
   }
 
   return (
@@ -85,6 +95,9 @@ function ImportDialog() {
           the active profile.
         </DialogDescription>
       </DialogHeader>
+      {importUnmanaged.error && (
+        <p className="text-xs text-amber mt-2">{errorMessage(importUnmanaged.error)}</p>
+      )}
       <DialogFooter>
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
@@ -107,9 +120,13 @@ function NewProfileDialog() {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    await saveProfile.mutateAsync({ name: trimmed, enabled: EMPTY_ITEMS });
-    setDialog(null);
-    setNotice(`Profile "${trimmed}" created.`);
+    try {
+      await saveProfile.mutateAsync({ name: trimmed, enabled: EMPTY_ITEMS });
+      setDialog(null);
+      setNotice(`Profile "${trimmed}" created.`);
+    } catch {
+      /* error shown via saveProfile.error below */
+    }
   }
 
   return (
@@ -130,6 +147,9 @@ function NewProfileDialog() {
           placeholder="my-profile"
         />
       </label>
+      {saveProfile.error && (
+        <p className="text-xs text-amber mt-2">{errorMessage(saveProfile.error)}</p>
+      )}
       <DialogFooter className="mt-4">
         <Button variant="outline" type="button" onClick={() => setDialog(null)}>
           Cancel

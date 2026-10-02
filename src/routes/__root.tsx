@@ -68,7 +68,12 @@ const AGENT_LABELS: Record<Agent, string> = {
   codex: "Codex",
 };
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { networkMode: "always" },
+    mutations: { networkMode: "always" },
+  },
+});
 
 function RootLayout() {
   return (
@@ -106,7 +111,7 @@ function AppShell() {
     let cleanup: (() => void) | undefined;
     void events.overviewChanged
       .listen(({ payload }) => {
-        void qc.invalidateQueries({ queryKey: ["overview", payload.agent] });
+        void qc.invalidateQueries({ queryKey: ["overview", payload.agent], exact: true });
       })
       .then((unlisten) => {
         cleanup = unlisten;
