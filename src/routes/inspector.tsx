@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SkillsView } from "@/components/harness/skills-view";
-import { useHarness } from "@/lib/harness-context";
+import { useOverview } from "@/lib/use-overview";
 
 export const Route = createFileRoute("/inspector")({
   validateSearch: (search: Record<string, unknown>): { skill?: string } => ({
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/inspector")({
 });
 
 function InspectorPage() {
-  const { overview } = useHarness();
+  const { data: overview } = useOverview();
   const { skill } = Route.useSearch();
   const navigate = Route.useNavigate();
 

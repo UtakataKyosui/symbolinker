@@ -12,7 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Metric, PageHeading, Panel, Status } from "@/components/harness/primitives";
 import { ProfileCards } from "@/components/harness/profile-cards";
-import { useHarness } from "@/lib/harness-context";
+import { useAgent } from "@/lib/agent-context";
+import { useUIState } from "@/lib/ui-state-context";
+import { useOverview } from "@/lib/use-overview";
 import type { Agent, KindStatus } from "@/bindings";
 
 export const Route = createFileRoute("/")({
@@ -53,7 +55,9 @@ function KindRow({ ks }: { ks: KindStatus }) {
 }
 
 function DashboardPage() {
-  const { agent, overview, loading, refresh, setDialog } = useHarness();
+  const { agent } = useAgent();
+  const { setDialog } = useUIState();
+  const { data: overview, isLoading, refetch } = useOverview();
 
   const totalLinked = overview?.links.reduce((sum, l) => sum + l.linked.length, 0) ?? 0;
   const totalLibrary = overview
@@ -72,7 +76,7 @@ function DashboardPage() {
         description={`Manage symlinks for the ${agent} agent harness.`}
         actions={
           <>
-            <Button variant="outline" onClick={() => void refresh()} disabled={loading}>
+            <Button variant="outline" onClick={() => void refetch()} disabled={isLoading}>
               <RefreshCw />
               Refresh
             </Button>
@@ -145,8 +149,8 @@ function DashboardPage() {
             ) : (
               <div className="empty-state">
                 <Activity />
-                <h3>{loading ? "Loading…" : "No data"}</h3>
-                {!loading && <p>Start the Tauri backend to connect.</p>}
+                <h3>{isLoading ? "Loading…" : "No data"}</h3>
+                {!isLoading && <p>Start the Tauri backend to connect.</p>}
               </div>
             )}
           </Panel>

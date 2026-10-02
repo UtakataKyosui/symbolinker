@@ -16,7 +16,9 @@ import {
 import { Metric, PageHeading, Panel, Status } from "@/components/harness/primitives";
 import { isEnabled, toggleItem } from "@/lib/agent-profiles";
 import { agentApi } from "@/lib/agent-api";
-import { useHarness } from "@/lib/harness-context";
+import { useAgent } from "@/lib/agent-context";
+import { useUIState } from "@/lib/ui-state-context";
+import { useOverview, useSaveProfile } from "@/lib/use-overview";
 import type { Agent, HookMeta } from "@/bindings";
 
 export const Route = createFileRoute("/hooks")({
@@ -30,7 +32,10 @@ const ORDER_MIN = -2_147_483_648;
 const ORDER_MAX = 2_147_483_647;
 
 function HooksPage() {
-  const { agent, overview, loading, saveProfile, query, setQuery } = useHarness();
+  const { agent } = useAgent();
+  const { query, setQuery } = useUIState();
+  const { data: overview } = useOverview();
+  const saveProfile = useSaveProfile();
   const [inspected, setInspected] = useState<string | undefined>();
   const [metaVersion, setMetaVersion] = useState(0);
 
@@ -41,7 +46,7 @@ function HooksPage() {
 
   async function handleToggle(name: string, enabled: boolean) {
     if (!active) return;
-    await saveProfile(toggleItem(active, "hooks", name, enabled));
+    await saveProfile.mutateAsync(toggleItem(active, "hooks", name, enabled));
   }
 
   return (
@@ -110,7 +115,7 @@ function HooksPage() {
                       agent={agent}
                       name={name}
                       enabled={enabled}
-                      disabled={loading}
+                      disabled={saveProfile.isPending}
                       metaVersion={metaVersion}
                       inspected={inspected === name}
                       onInspect={() => setInspected(inspected === name ? undefined : name)}

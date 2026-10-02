@@ -15,7 +15,9 @@ mod state_repo;
 mod testutil;
 
 use specta_typescript::Typescript;
-use tauri_specta::{collect_commands, Builder};
+use tauri_specta::{collect_commands, collect_events, Builder};
+
+use crate::model::OverviewChanged;
 
 #[tauri::command]
 #[specta::specta]
@@ -27,18 +29,20 @@ fn greet(name: &str) -> String {
 const BINDINGS_PATH: &str = "../src/bindings.ts";
 
 fn specta_builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![
-        greet,
-        commands::agent_overview,
-        commands::adopt,
-        commands::import_unmanaged,
-        commands::save_profile,
-        commands::delete_profile,
-        commands::activate_profile,
-        commands::unlink_kind,
-        commands::get_hook_meta,
-        commands::save_hook_meta,
-    ])
+    Builder::<tauri::Wry>::new()
+        .commands(collect_commands![
+            greet,
+            commands::agent_overview,
+            commands::adopt,
+            commands::import_unmanaged,
+            commands::save_profile,
+            commands::delete_profile,
+            commands::activate_profile,
+            commands::unlink_kind,
+            commands::get_hook_meta,
+            commands::save_hook_meta,
+        ])
+        .events(collect_events![OverviewChanged])
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -65,6 +69,15 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// bindings.ts を再生成する。`cargo test regenerate_bindings -- --ignored` で実行する。
+    #[test]
+    #[ignore]
+    fn regenerate_bindings() {
+        specta_builder()
+            .export(Typescript::default(), BINDINGS_PATH)
+            .expect("failed to export typescript bindings");
+    }
 
     /// 生成結果がコミット済みの bindings.ts と一致することを確認する。書き換えはしない。
     #[test]

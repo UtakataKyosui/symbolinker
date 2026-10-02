@@ -10,13 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useHarness } from "@/lib/harness-context";
+import { useUIState } from "@/lib/ui-state-context";
+import { useAdopt, useImportUnmanaged, useSaveProfile } from "@/lib/use-overview";
 import type { Items } from "@/bindings";
 
 const EMPTY_ITEMS: Items = { skills: [], agents: [], hooks: [], rules: [] };
 
 export function HarnessDialog() {
-  const { dialog, setDialog } = useHarness();
+  const { dialog, setDialog } = useUIState();
   return (
     <Dialog
       open={dialog !== null}
@@ -34,10 +35,11 @@ export function HarnessDialog() {
 }
 
 function AdoptDialog() {
-  const { adopt, setDialog, setNotice, loading } = useHarness();
+  const { setDialog, setNotice } = useUIState();
+  const adopt = useAdopt();
 
   async function handleAdopt() {
-    await adopt();
+    await adopt.mutateAsync();
     setDialog(null);
     setNotice("Agent adopted. Default profile created.");
   }
@@ -55,7 +57,7 @@ function AdoptDialog() {
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button onClick={() => void handleAdopt()} disabled={loading}>
+        <Button onClick={() => void handleAdopt()} disabled={adopt.isPending}>
           <PackagePlus />
           Adopt
         </Button>
@@ -65,10 +67,11 @@ function AdoptDialog() {
 }
 
 function ImportDialog() {
-  const { importUnmanaged, setDialog, setNotice, loading } = useHarness();
+  const { setDialog, setNotice } = useUIState();
+  const importUnmanaged = useImportUnmanaged();
 
   async function handleImport() {
-    await importUnmanaged();
+    await importUnmanaged.mutateAsync();
     setDialog(null);
     setNotice("Unmanaged items imported into the active profile.");
   }
@@ -86,7 +89,7 @@ function ImportDialog() {
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button onClick={() => void handleImport()} disabled={loading}>
+        <Button onClick={() => void handleImport()} disabled={importUnmanaged.isPending}>
           <FolderInput />
           Import
         </Button>
@@ -96,14 +99,15 @@ function ImportDialog() {
 }
 
 function NewProfileDialog() {
-  const { saveProfile, setDialog, setNotice, loading } = useHarness();
+  const { setDialog, setNotice } = useUIState();
+  const saveProfile = useSaveProfile();
   const [name, setName] = useState("");
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    await saveProfile({ name: trimmed, enabled: EMPTY_ITEMS });
+    await saveProfile.mutateAsync({ name: trimmed, enabled: EMPTY_ITEMS });
     setDialog(null);
     setNotice(`Profile "${trimmed}" created.`);
   }
@@ -130,7 +134,7 @@ function NewProfileDialog() {
         <Button variant="outline" type="button" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button type="submit" disabled={loading || !name.trim()}>
+        <Button type="submit" disabled={saveProfile.isPending || !name.trim()}>
           <Plus />
           Create Profile
         </Button>

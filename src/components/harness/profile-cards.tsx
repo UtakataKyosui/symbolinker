@@ -1,9 +1,10 @@
 import { enabledCount } from "@/lib/agent-profiles";
 import { Status } from "@/components/harness/primitives";
-import { useHarness } from "@/lib/harness-context";
+import { useOverview, useActivateProfile } from "@/lib/use-overview";
 
 export function ProfileCards() {
-  const { overview, activateProfile } = useHarness();
+  const { data: overview } = useOverview();
+  const activateProfile = useActivateProfile();
   const profiles = overview?.profiles ?? [];
   const active = overview?.active ?? null;
 
@@ -17,7 +18,7 @@ export function ProfileCards() {
         <button
           key={p.name}
           className={`profile-card ${active === p.name ? "is-active" : ""}`}
-          onClick={() => void activateProfile(p.name)}
+          onClick={() => void activateProfile.mutateAsync(p.name)}
         >
           <div className="flex items-center justify-between gap-2">
             <strong>{p.name}</strong>

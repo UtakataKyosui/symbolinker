@@ -3,7 +3,8 @@ import { Folder, RefreshCw, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { PageHeading, Panel, Status } from "@/components/harness/primitives";
-import { useHarness } from "@/lib/harness-context";
+import { useAgent } from "@/lib/agent-context";
+import { useOverview, useUnlinkKind } from "@/lib/use-overview";
 import type { Kind } from "@/bindings";
 
 export const Route = createFileRoute("/settings")({
@@ -18,7 +19,9 @@ const KIND_LABELS: Record<Kind, string> = {
 };
 
 function SettingsPage() {
-  const { agent, overview, loading, refresh, unlinkKind } = useHarness();
+  const { agent } = useAgent();
+  const { data: overview, isFetching, refetch } = useOverview();
+  const unlinkKind = useUnlinkKind();
 
   const configDir = `~/.${agent}`;
 
@@ -69,7 +72,7 @@ function SettingsPage() {
             <p className="muted">Connect the Tauri backend to see paths.</p>
           )}
           <Separator className="my-5" />
-          <Button variant="outline" onClick={() => void refresh()} disabled={loading}>
+          <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
             <RefreshCw />
             Refresh
           </Button>
@@ -94,8 +97,8 @@ function SettingsPage() {
                 <Button
                   variant="outline"
                   size="xs"
-                  disabled={ks.linked.length === 0 || loading}
-                  onClick={() => void unlinkKind(ks.kind)}
+                  disabled={ks.linked.length === 0 || unlinkKind.isPending}
+                  onClick={() => void unlinkKind.mutateAsync(ks.kind)}
                 >
                   Unlink
                 </Button>

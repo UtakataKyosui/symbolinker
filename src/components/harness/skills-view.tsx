@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Metric, PageHeading, Panel, Picker, Status } from "@/components/harness/primitives";
 import { isEnabled, toggleItem } from "@/lib/agent-profiles";
-import { useHarness } from "@/lib/harness-context";
+import { useUIState } from "@/lib/ui-state-context";
+import { useOverview, useSaveProfile } from "@/lib/use-overview";
 import type { Overview } from "@/bindings";
 
 type SkillStatus = "Linked" | "Inactive" | "Unmanaged";
@@ -56,7 +57,9 @@ export function SkillsView({
   inspected: string | undefined;
   onInspect: (id: string | undefined) => void;
 }) {
-  const { overview, saveProfile, setDialog, refresh, query, setQuery } = useHarness();
+  const { setDialog, query, setQuery } = useUIState();
+  const { data: overview, refetch } = useOverview();
+  const saveProfile = useSaveProfile();
   const [statusFilter, setStatusFilter] = useState("All states");
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -76,7 +79,7 @@ export function SkillsView({
 
   async function toggleSkill(name: string, enabled: boolean) {
     if (!active) return;
-    await saveProfile(toggleItem(active, "skills", name, enabled));
+    await saveProfile.mutateAsync(toggleItem(active, "skills", name, enabled));
   }
 
   async function bulkEnable(enable: boolean) {
@@ -86,7 +89,7 @@ export function SkillsView({
     for (const name of eligible) {
       profile = toggleItem(profile, "skills", name, enable);
     }
-    await saveProfile(profile);
+    await saveProfile.mutateAsync(profile);
     setSelected([]);
   }
 
@@ -96,7 +99,7 @@ export function SkillsView({
         {...heading}
         actions={
           <>
-            <Button variant="outline" onClick={() => void refresh()}>
+            <Button variant="outline" onClick={() => void refetch()}>
               <RefreshCw />
               Scan
             </Button>
@@ -306,13 +309,14 @@ function SkillInspector({
   activeProfileName: string | null;
   onClose: () => void;
 }) {
-  const { overview, saveProfile } = useHarness();
+  const { data: overview } = useOverview();
+  const saveProfile = useSaveProfile();
   const active = overview?.profiles.find((p) => p.name === overview.active) ?? null;
   const enabled = active ? isEnabled(active, "skills", entry.name) : false;
 
   async function handleToggle(next: boolean) {
     if (!active) return;
-    await saveProfile(toggleItem(active, "skills", entry.name, next));
+    await saveProfile.mutateAsync(toggleItem(active, "skills", entry.name, next));
   }
 
   return (

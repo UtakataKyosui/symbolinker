@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use tauri_specta::Event;
 
-use crate::agent::Kind;
+use crate::agent::{Agent, Kind};
 
 /// 種類ごとの項目名の一覧。ライブラリの内容にも、 Profile の有効項目にも使う。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -88,6 +89,13 @@ pub struct Overview {
     pub profiles: Vec<Profile>,
     pub library: Items,
     pub links: Vec<KindStatus>,
+}
+
+/// ミューテーション成功後に emit するイベント。フロントはこれを受けて overview を再取得する。
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct OverviewChanged {
+    pub agent: Agent,
 }
 
 #[cfg(test)]
