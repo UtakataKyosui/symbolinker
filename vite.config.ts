@@ -1,5 +1,6 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import process from "node:process";
 import path from "path";
 import tailwindcss from "@tailwindcss/vite";
@@ -7,7 +8,17 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: lazyPlugins(() => [react(), tailwindcss()]),
+  plugins: lazyPlugins(() => [
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    react(),
+    tailwindcss(),
+  ]),
+  fmt: {
+    ignorePatterns: ["src/routeTree.gen.ts"],
+  },
+  lint: {
+    ignorePatterns: ["src/routeTree.gen.ts"],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
@@ -32,7 +43,7 @@ export default defineConfig(() => ({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname,"./src")
-    }
-  }
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
 }));

@@ -432,7 +432,12 @@ svg {
   border: 1px solid transparent;
   font-size: 12px;
   text-align: left;
+  text-decoration: none;
   margin-bottom: 3px;
+}
+.nav-item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
 }
 .nav-item svg {
   width: 15px;
