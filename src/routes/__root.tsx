@@ -3,15 +3,17 @@ import { Link, Outlet, createRootRoute, useNavigate, useRouterState } from "@tan
 import {
   Box,
   CircleCheck,
-  Folder,
+  FolderInput,
   Grid2X2,
   Link as LinkIcon,
+  Loader2,
   Menu,
+  PackagePlus,
   RefreshCw,
   Search,
   Settings,
   SlidersHorizontal,
-  User,
+  TriangleAlert,
   Workflow,
   X,
   Zap,
@@ -21,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { HarnessDialog } from "@/components/harness/harness-dialog";
 import { PageHeading, Status } from "@/components/harness/primitives";
 import { HarnessProvider, useHarness } from "@/lib/harness-context";
+import type { Agent } from "@/bindings";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -30,7 +33,7 @@ export const Route = createRootRoute({
 const navigation = [
   {
     group: "Overview",
-    items: [{ to: "/", label: "Dashboard & Targets", icon: Grid2X2 }],
+    items: [{ to: "/", label: "Dashboard", icon: Grid2X2 }],
   },
   {
     group: "Agent Harness",
@@ -42,12 +45,18 @@ const navigation = [
   {
     group: "Orchestration",
     items: [
-      { to: "/profiles", label: "Profiles & Matrix", icon: SlidersHorizontal },
+      { to: "/profiles", label: "Profiles", icon: SlidersHorizontal },
       { to: "/inspector", label: "Symlink Inspector", icon: LinkIcon },
     ],
   },
 ] as const;
+
 const searchablePaths = ["/skills", "/hooks", "/inspector"];
+
+const AGENT_LABELS: Record<Agent, string> = {
+  claude: "Claude",
+  codex: "Codex",
+};
 
 function RootLayout() {
   return (
@@ -59,26 +68,32 @@ function RootLayout() {
 
 function AppShell() {
   const {
-    skills,
-    hooks,
-    vault,
-    root,
-    activeProfile,
-    linked,
-    broken,
+    agent,
+    setAgent,
+    overview,
+    loading,
+    error,
     query,
     setQuery,
     notice,
     setNotice,
+    setDialog,
   } = useHarness();
+
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const linkedCount = overview?.links.find((l) => l.kind === "skills")?.linked.length ?? 0;
+  const skillCount = overview?.library.skills.length ?? 0;
+  const hookCount = overview?.library.hooks.length ?? 0;
+  const hasUnmanaged = overview?.links.some((l) => l.unmanaged.length > 0) ?? false;
+
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -113,11 +128,17 @@ function AppShell() {
             <span>SymlinkHarness</span>
             <code>v1.4.0</code>
           </div>
-          <div className="workspace-chip">
-            <Folder />
-            <span>acme-corp/web-frontend</span>
-            <span className="muted">→</span>
-            <code>{vault}</code>
+          <div className="agent-selector">
+            {(["claude", "codex"] as Agent[]).map((a) => (
+              <button
+                key={a}
+                className={`agent-tab ${agent === a ? "agent-tab-active" : ""}`}
+                onClick={() => setAgent(a)}
+                aria-pressed={agent === a}
+              >
+                {AGENT_LABELS[a]}
+              </button>
+            ))}
           </div>
         </div>
         <div className="titlebar-right">
@@ -135,10 +156,7 @@ function AppShell() {
             />
             <kbd>⌘K</kbd>
           </div>
-          <span className="preview-label">UI Preview</span>
-          <div className="avatar">
-            <User />
-          </div>
+          {loading && <Loader2 className="animate-spin muted" size={16} aria-label="Loading" />}
         </div>
       </header>
       {sidebarOpen && (
@@ -166,11 +184,11 @@ function AppShell() {
                     <item.icon />
                     <span>{item.label}</span>
                     {item.to === "/" ? (
-                      <Status>{linked} active</Status>
-                    ) : item.to === "/skills" || item.to === "/hooks" ? (
-                      <span className="nav-count">
-                        {item.to === "/skills" ? skills.length : hooks.length}
-                      </span>
+                      <Status>{linkedCount} active</Status>
+                    ) : item.to === "/skills" ? (
+                      <span className="nav-count">{skillCount}</span>
+                    ) : item.to === "/hooks" ? (
+                      <span className="nav-count">{hookCount}</span>
                     ) : null}
                   </Link>
                 ))}
@@ -180,12 +198,12 @@ function AppShell() {
         </div>
         <div className="sidebar-bottom">
           <div className="directory-card">
-            <span className="nav-label">Target directory</span>
-            <code>.cursor/rules & ~/.claude/skills</code>
+            <span className="nav-label">Agent</span>
+            <code>~/.{agent}</code>
           </div>
           <div className="engine-indicator">
-            <span className="status-dot" />
-            <span>Symlink Engine Preview</span>
+            <span className={`status-dot ${overview ? "status-connected" : ""}`} />
+            <span>{overview ? "Connected" : loading ? "Connecting…" : "Disconnected"}</span>
             <RefreshCw />
           </div>
           <Link
@@ -195,28 +213,53 @@ function AppShell() {
             onClick={() => setQuery("")}
           >
             <Settings />
-            <span>Workspace Settings</span>
+            <span>Settings</span>
           </Link>
         </div>
       </aside>
       <main className="main-stage">
+        {error && (
+          <div className="banner banner-error" role="alert">
+            <TriangleAlert size={16} />
+            <span>{error}</span>
+          </div>
+        )}
+        {overview && !overview.adopted && (
+          <div className="banner banner-warn">
+            <PackagePlus size={16} />
+            <span>
+              Agent <strong>{AGENT_LABELS[agent]}</strong> has not been adopted yet.
+            </span>
+            <Button size="xs" onClick={() => setDialog("adopt")}>
+              Adopt now
+            </Button>
+          </div>
+        )}
+        {overview?.adopted && hasUnmanaged && (
+          <div className="banner banner-info">
+            <FolderInput size={16} />
+            <span>Unmanaged items found in the agent directory.</span>
+            <Button size="xs" variant="outline" onClick={() => setDialog("import")}>
+              Import
+            </Button>
+          </div>
+        )}
         <Outlet />
       </main>
       <footer className="statusbar">
         <div>
-          <span className="muted">Target Root:</span>
-          <code>{root}</code>
+          <span className="muted">Agent:</span>
+          <code>~/.{agent}</code>
           <span className="statusbar-divider" />
           <span className="muted">Active Profile:</span>
-          <span className="text-blue">{activeProfile.name}</span>
+          <span className="text-blue">{overview?.active ?? "—"}</span>
         </div>
         <div>
-          <span>Links:</span>
-          <span className="text-cyan">{linked} Mounted</span>
-          <span className="text-amber">{broken} Broken</span>
+          <span>Skills:</span>
+          <span className="text-cyan">{linkedCount} linked</span>
           <span className="statusbar-divider" />
-          <span className="status-dot" />
-          <span>Local UI Preview</span>
+          <span className={`status-dot ${overview ? "status-connected" : ""}`} />
+          <span>{overview ? "Connected" : "No connection"}</span>
         </div>
       </footer>
       {notice && (

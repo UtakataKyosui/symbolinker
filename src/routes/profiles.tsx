@@ -1,15 +1,6 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  Box,
-  Download,
-  Grid2X2,
-  Link,
-  ShieldCheck,
-  SlidersHorizontal,
-  Terminal,
-  Zap,
-} from "lucide-react";
+import { Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -22,157 +13,188 @@ import {
 } from "@/components/ui/table";
 import { PageHeading, Panel, Status } from "@/components/harness/primitives";
 import { ProfileCards } from "@/components/harness/profile-cards";
-import { downloadJson } from "@/lib/download-json";
+import { isEnabled, toggleItem, enabledCount } from "@/lib/agent-profiles";
 import { useHarness } from "@/lib/harness-context";
-import { profiles } from "@/lib/harness-data";
+import type { Kind, Profile } from "@/bindings";
 
 export const Route = createFileRoute("/profiles")({
   component: ProfilesPage,
 });
 
+const ALL_KINDS: Kind[] = ["skills", "agents", "hooks", "rules"];
+const KIND_LABELS: Record<Kind, string> = {
+  skills: "Skills",
+  agents: "Sub-Agents",
+  hooks: "Hooks",
+  rules: "Rules",
+};
+
 function ProfilesPage() {
-  const { skills, setSkills, activeProfile, linked, setDialog } = useHarness();
+  const { overview, saveProfile, deleteProfile, setDialog } = useHarness();
+  const [editingName, setEditingName] = useState<string | null>(null);
+
+  const profiles = overview?.profiles ?? [];
+  const active = overview?.active ?? null;
+  const editingProfile = profiles.find((p) => p.name === editingName) ?? null;
+
+  async function handleToggle(profile: Profile, kind: Kind, name: string, enabled: boolean) {
+    await saveProfile(toggleItem(profile, kind, name, enabled));
+  }
+
+  async function handleDelete(name: string) {
+    if (name === active) return;
+    await deleteProfile(name);
+    if (editingName === name) setEditingName(null);
+  }
+
+  function allItemsForKind(kind: Kind): string[] {
+    return overview?.library[kind] ?? [];
+  }
+
   return (
     <>
       <PageHeading
-        eyebrow="Orchestration / Profiles & Rule Matrix"
-        title="Profiles & Rule Matrix"
-        description="Define bundles of skills, hooks, and rules for your developer persona and workspace."
+        eyebrow="Orchestration / Profiles"
+        title="Profiles"
+        description="Define item bundles per profile and switch between them."
         actions={
-          <>
-            <Button
-              variant="outline"
-              onClick={() =>
-                downloadJson("harness-matrix.json", { profile: activeProfile.name, skills })
-              }
-            >
-              <Download />
-              Export Matrix
+          overview?.adopted && (
+            <Button onClick={() => setDialog("new-profile")}>
+              <Plus />
+              New Profile
             </Button>
-            <Button onClick={() => setDialog("apply")}>
-              <Link />
-              Apply Symlinks
-            </Button>
-          </>
+          )
         }
       />
-      <section className="panel live-profile">
-        <div className="flex gap-3 items-center">
-          <div className="profile-symbol">
-            <Terminal />
-          </div>
-          <div>
-            <div className="eyebrow">Live state: Active harness profile</div>
-            <h2>
-              {activeProfile.name} <Status>Preview</Status>
-            </h2>
-          </div>
+      {overview && !overview.adopted ? (
+        <div className="empty-state">
+          <SlidersHorizontal />
+          <h3>Agent not adopted</h3>
+          <p>Adopt the agent to start managing profiles.</p>
         </div>
-        <div className="live-profile-counts">
-          <span>
-            <Box />
-            {linked} Skills
-          </span>
-          <span>
-            <Zap />
-            {activeProfile.hooks} Hooks
-          </span>
-          <span>
-            <ShieldCheck />
-            Preset
-          </span>
-        </div>
-      </section>
-      <div className="profiles-layout">
-        <Panel
-          title="Capability × Profile Matrix"
-          icon={<Grid2X2 />}
-          extra={<span className="micro muted">Click toggles to configure preview</span>}
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Capability / Extension Target</TableHead>
-                {profiles.map((p, index) => (
-                  <TableHead
-                    key={p.name}
-                    className={p.name === activeProfile.name ? "matrix-active" : ""}
-                  >
-                    {["Frontend", "Tech Lead", "Python", "Fullstack"][index]}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {skills.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell>
-                    <strong className="mono">{s.id}</strong>
-                    <p className="row-description">{s.description}</p>
-                  </TableCell>
-                  {s.matrix.map((checked, index) => (
-                    <TableCell
-                      key={index}
-                      className={profiles[index].name === activeProfile.name ? "matrix-active" : ""}
-                    >
-                      <Checkbox
-                        aria-label={`${s.id} for ${profiles[index].name}`}
-                        checked={checked}
-                        onCheckedChange={(next) =>
-                          setSkills((previous) =>
-                            previous.map((skill) =>
-                              skill.id === s.id
-                                ? {
-                                    ...skill,
-                                    matrix: skill.matrix.map((value, i) =>
-                                      i === index ? next : value,
-                                    ),
-                                  }
-                                : skill,
-                            ),
-                          )
-                        }
-                      />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="table-footer">
-            <span>Matrix version: Preview v1</span>
-            <code>.agent/profiles.matrix.json</code>
-          </div>
-        </Panel>
-        <div className="column-stack">
-          <Panel title="Preset Switcher" icon={<SlidersHorizontal />}>
-            <ProfileCards />
-          </Panel>
+      ) : (
+        <div className="profiles-layout">
           <Panel
-            title="Dynamic Activation Engine"
-            icon={<Zap />}
-            extra={<Status tone="amber">Preview Rules</Status>}
-          >
-            <p className="panel-description">
-              Workspace heuristics for automatic profile activation.
-            </p>
-            {[
-              ["Next.js Workspace", 'package.json contains "next"', "Frontend Specialist"],
-              ["Release Branching", "git branch matches release/*", "Tech Lead & Code Reviewer"],
-              ["Python Environment", "root has pyproject.toml", "Backend Python Engineer"],
-            ].map(([title, condition, profile]) => (
-              <div className="heuristic" key={title}>
-                <strong>{title}</strong>
-                <code>{condition}</code>
-                <span>
-                  <ArrowRight />
-                  {profile}
+            title="Profile Editor"
+            icon={<SlidersHorizontal />}
+            extra={
+              editingProfile && (
+                <span className="micro muted">
+                  Editing: <strong>{editingProfile.name}</strong>
                 </span>
+              )
+            }
+          >
+            {profiles.length === 0 ? (
+              <div className="empty-state">
+                <SlidersHorizontal />
+                <h3>No profiles yet</h3>
+                <Button size="xs" onClick={() => setDialog("new-profile")}>
+                  Create first profile
+                </Button>
               </div>
-            ))}
+            ) : (
+              <>
+                <div className="profile-selector">
+                  {profiles.map((p) => (
+                    <button
+                      key={p.name}
+                      className={`profile-tab ${editingName === p.name ? "profile-tab-active" : ""}`}
+                      onClick={() => setEditingName(p.name)}
+                    >
+                      {p.name}
+                      {active === p.name && <Status tone="cyan">Active</Status>}
+                    </button>
+                  ))}
+                </div>
+                {editingProfile ? (
+                  <>
+                    <div className="profile-editor-header">
+                      <div>
+                        <strong>{editingProfile.name}</strong>
+                        <span className="muted micro">
+                          {" "}
+                          · {enabledCount(editingProfile)} items enabled
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        {active !== editingProfile.name && (
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-amber"
+                            onClick={() => void handleDelete(editingProfile.name)}
+                          >
+                            <Trash2 size={14} />
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {ALL_KINDS.map((kind) => {
+                      const items = allItemsForKind(kind);
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={kind} className="kind-section">
+                          <div className="section-label">{KIND_LABELS[kind]}</div>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="check-column">
+                                  <Checkbox
+                                    aria-label={`Toggle all ${kind}`}
+                                    checked={items.every((name) =>
+                                      isEnabled(editingProfile, kind, name),
+                                    )}
+                                    onCheckedChange={(checked) => {
+                                      let profile = editingProfile;
+                                      for (const name of items) {
+                                        profile = toggleItem(profile, kind, name, !!checked);
+                                      }
+                                      void saveProfile(profile);
+                                    }}
+                                  />
+                                </TableHead>
+                                <TableHead>Name</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {items.map((name) => (
+                                <TableRow key={name}>
+                                  <TableCell>
+                                    <Checkbox
+                                      aria-label={`Enable ${name} in ${editingProfile.name}`}
+                                      checked={isEnabled(editingProfile, kind, name)}
+                                      onCheckedChange={(checked) =>
+                                        void handleToggle(editingProfile, kind, name, !!checked)
+                                      }
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <code>{name}</code>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <p className="muted">Select a profile to edit its items.</p>
+                )}
+              </>
+            )}
           </Panel>
+          <div className="column-stack">
+            <Panel title="Active Profile" icon={<SlidersHorizontal />}>
+              <p className="panel-description">Click a profile card to activate it.</p>
+              <ProfileCards />
+            </Panel>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

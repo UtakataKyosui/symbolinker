@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SkillsView } from "@/components/harness/skills-view";
-import { initialSkills } from "@/lib/harness-data";
+import { useHarness } from "@/lib/harness-context";
 
 export const Route = createFileRoute("/inspector")({
   validateSearch: (search: Record<string, unknown>): { skill?: string } => ({
@@ -10,17 +10,22 @@ export const Route = createFileRoute("/inspector")({
 });
 
 function InspectorPage() {
-  const { skill = initialSkills[0].id } = Route.useSearch();
+  const { overview } = useHarness();
+  const { skill } = Route.useSearch();
   const navigate = Route.useNavigate();
+
+  const firstSkill = overview?.library.skills[0];
+  const defaultSkill = skill ?? firstSkill;
+
   return (
     <SkillsView
       heading={{
         eyebrow: "Filesystem / Link Topology",
         title: "Symlink Inspector",
         description:
-          "Inspect source definitions, mounted targets, and the integrity of harness connections.",
+          "Inspect library items, linked targets, and the integrity of harness connections.",
       }}
-      inspected={skill}
+      inspected={defaultSkill}
       onInspect={(id) =>
         void (id
           ? navigate({ search: { skill: id } })

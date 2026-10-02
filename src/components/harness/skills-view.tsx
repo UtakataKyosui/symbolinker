@@ -1,20 +1,5 @@
 import { useState } from "react";
-import {
-  ArrowDown,
-  Box,
-  Check,
-  ChevronRight,
-  Copy,
-  Folder,
-  Layers,
-  Link,
-  Link2Off,
-  RefreshCw,
-  Search,
-  Terminal,
-  TriangleAlert,
-  X,
-} from "lucide-react";
+import { Box, ChevronRight, FolderInput, Link, Link2Off, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -29,8 +14,38 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Metric, PageHeading, Panel, Picker, Status } from "@/components/harness/primitives";
+import { isEnabled, toggleItem } from "@/lib/agent-profiles";
 import { useHarness } from "@/lib/harness-context";
-import { skillPayload, type Skill } from "@/lib/harness-data";
+import type { Overview } from "@/bindings";
+
+type SkillStatus = "Linked" | "Inactive" | "Unmanaged";
+
+type SkillEntry = {
+  name: string;
+  status: SkillStatus;
+  inLibrary: boolean;
+};
+
+function buildEntries(overview: Overview): SkillEntry[] {
+  const skillLinks = overview.links.find((l) => l.kind === "skills");
+  const active = overview.profiles.find((p) => p.name === overview.active);
+  const linkedSet = new Set(skillLinks?.linked ?? []);
+  const unmanagedSet = new Set(skillLinks?.unmanaged ?? []);
+
+  const entries: SkillEntry[] = overview.library.skills.map((name) => ({
+    name,
+    inLibrary: true,
+    status: linkedSet.has(name) ? "Linked" : "Inactive",
+  }));
+
+  for (const name of unmanagedSet) {
+    if (!active?.enabled.skills.includes(name)) {
+      entries.push({ name, inLibrary: false, status: "Unmanaged" });
+    }
+  }
+
+  return entries;
+}
 
 export function SkillsView({
   heading,
@@ -41,28 +56,37 @@ export function SkillsView({
   inspected: string | undefined;
   onInspect: (id: string | undefined) => void;
 }) {
-  const { skills, query, setQuery, linked, broken, toggleSkill, rescan, setNotice } = useHarness();
-  const [category, setCategory] = useState("All categories");
-  const [stateFilter, setStateFilter] = useState("All states");
+  const { overview, saveProfile, setDialog, refresh, query, setQuery } = useHarness();
+  const [statusFilter, setStatusFilter] = useState("All states");
   const [selected, setSelected] = useState<string[]>([]);
-  const inspectedSkill = skills.find((s) => s.id === inspected);
-  const filteredSkills = skills.filter(
-    (s) =>
-      `${s.id} ${s.description} ${s.category} ${s.target}`
-        .toLowerCase()
-        .includes(query.toLowerCase()) &&
-      (category === "All categories" || s.category === category) &&
-      (stateFilter === "All states" || s.status === stateFilter),
+
+  const active = overview?.profiles.find((p) => p.name === overview.active) ?? null;
+  const entries = overview ? buildEntries(overview) : [];
+  const skillLinks = overview?.links.find((l) => l.kind === "skills");
+
+  const filteredEntries = entries.filter(
+    (e) =>
+      e.name.toLowerCase().includes(query.toLowerCase()) &&
+      (statusFilter === "All states" || e.status === statusFilter),
   );
 
-  function bulkLink(enabled: boolean) {
-    const eligible = selected.filter((id) =>
-      skills.some((s) => s.id === id && s.status !== "Broken" && s.status !== "Collision"),
-    );
-    eligible.forEach((id) => toggleSkill(id, enabled));
-    setNotice(
-      `${eligible.length} skills ${enabled ? "enabled" : "disabled"} in preview. Unresolved definitions are skipped.`,
-    );
+  const inspectedEntry = entries.find((e) => e.name === inspected);
+  const linkedCount = skillLinks?.linked.length ?? 0;
+  const unmanagedCount = skillLinks?.unmanaged.length ?? 0;
+
+  async function toggleSkill(name: string, enabled: boolean) {
+    if (!active) return;
+    await saveProfile(toggleItem(active, "skills", name, enabled));
+  }
+
+  async function bulkEnable(enable: boolean) {
+    if (!active) return;
+    const eligible = selected.filter((name) => entries.some((e) => e.name === name && e.inLibrary));
+    let profile = active;
+    for (const name of eligible) {
+      profile = toggleItem(profile, "skills", name, enable);
+    }
+    await saveProfile(profile);
     setSelected([]);
   }
 
@@ -72,15 +96,25 @@ export function SkillsView({
         {...heading}
         actions={
           <>
-            <Button variant="outline" onClick={rescan}>
+            <Button variant="outline" onClick={() => void refresh()}>
               <RefreshCw />
-              Scan Disk
+              Scan
             </Button>
-            <Button variant="outline" disabled={!selected.length} onClick={() => bulkLink(false)}>
+            {unmanagedCount > 0 && (
+              <Button variant="outline" onClick={() => setDialog("import")}>
+                <FolderInput />
+                Import ({unmanagedCount} unmanaged)
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              disabled={!selected.length}
+              onClick={() => void bulkEnable(false)}
+            >
               <Link2Off />
               Unlink ({selected.length})
             </Button>
-            <Button disabled={!selected.length} onClick={() => bulkLink(true)}>
+            <Button disabled={!selected.length} onClick={() => void bulkEnable(true)}>
               <Link />
               Bulk Link ({selected.length})
             </Button>
@@ -89,71 +123,63 @@ export function SkillsView({
       />
       <div className="metrics-grid small-metrics">
         <Metric
-          title="Registered skills"
+          title="Library skills"
           icon={<Box />}
-          value={`${skills.length}`}
-          suffix="Capabilities"
+          value={`${overview?.library.skills.length ?? 0}`}
+          suffix="In library"
           badge="Registry"
-          note="Workspace definitions"
+          note="Imported & managed"
           trend="cyan"
         />
         <Metric
           title="Active symlinks"
           icon={<Link />}
-          value={`${linked}`}
-          suffix="Mounted"
-          note="Enabled connections"
+          value={`${linkedCount}`}
+          suffix="Linked"
+          note="Enabled in active profile"
           trend="cyan"
         />
         <Metric
-          title="Dangling / broken"
-          icon={<TriangleAlert />}
-          value={`${broken}`}
-          suffix="Broken"
-          badge="Path Shift"
-          note="Requires inspection"
-          trend="amber"
+          title="Unmanaged items"
+          icon={<FolderInput />}
+          value={`${unmanagedCount}`}
+          suffix="Unmanaged"
+          badge={unmanagedCount > 0 ? "Import needed" : "Clean"}
+          note="Not yet imported"
+          trend={unmanagedCount > 0 ? "amber" : "cyan"}
         />
         <Metric
-          title="Harness coverage"
-          icon={<Layers />}
-          value="4"
-          suffix="Targets"
-          note="Cursor · Claude · Codex · Local"
+          title="Active profile"
+          icon={<Box />}
+          value={overview?.active ?? "—"}
+          badge="Live"
+          note={active ? `${active.enabled.skills.length} skills enabled` : "No profile"}
           trend="blue"
+          compact
         />
       </div>
-      <div className={`skills-layout ${inspectedSkill ? "with-inspector" : ""}`}>
+      <div className={`skills-layout ${inspectedEntry ? "with-inspector" : ""}`}>
         <section className="panel skill-registry">
           <div className="filter-bar">
             <div className="filter-search">
               <Search />
               <Input
                 aria-label="Filter skills"
-                placeholder="Filter skills by name, target, or category..."
+                placeholder="Filter skills by name..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
             <Picker
-              label="Filter category"
-              value={category}
-              options={["All categories", ...new Set(skills.map((s) => s.category))]}
-              onChange={setCategory}
-            />
-            <Picker
               label="Filter status"
-              value={stateFilter}
-              options={["All states", "Mounted", "Unlinked", "Collision", "Broken"]}
-              onChange={setStateFilter}
+              value={statusFilter}
+              options={["All states", "Linked", "Inactive", "Unmanaged"]}
+              onChange={setStatusFilter}
             />
           </div>
           <div className="selection-bar">
             <span>
               <Status>{selected.length} selected</Status>
-              <span className="micro">
-                Target Matrix: <code>.cursor/rules/*.mdc</code>
-              </span>
             </span>
             <Button
               variant="ghost"
@@ -161,8 +187,7 @@ export function SkillsView({
               onClick={() => {
                 setSelected([]);
                 setQuery("");
-                setCategory("All categories");
-                setStateFilter("All states");
+                setStatusFilter("All states");
               }}
             >
               Reset filters
@@ -175,97 +200,125 @@ export function SkillsView({
                   <Checkbox
                     aria-label="Select all visible skills"
                     checked={
-                      filteredSkills.length > 0 &&
-                      filteredSkills.every((s) => selected.includes(s.id))
+                      filteredEntries.length > 0 &&
+                      filteredEntries.every((e) => selected.includes(e.name))
                     }
                     onCheckedChange={(checked) =>
                       setSelected(
                         checked
-                          ? [...new Set([...selected, ...filteredSkills.map((s) => s.id)])]
-                          : selected.filter((id) => !filteredSkills.some((s) => s.id === id)),
+                          ? [...new Set([...selected, ...filteredEntries.map((e) => e.name)])]
+                          : selected.filter(
+                              (name) => !filteredEntries.some((e) => e.name === name),
+                            ),
                       )
                     }
                   />
                 </TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Capability / Descriptor</TableHead>
-                <TableHead>Category</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Name</TableHead>
                 <TableHead>Toggle Link</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredSkills.map((s) => (
-                <TableRow key={s.id} className={inspected === s.id ? "selected-row" : ""}>
+              {filteredEntries.map((e) => (
+                <TableRow key={e.name} className={inspected === e.name ? "selected-row" : ""}>
                   <TableCell>
                     <Checkbox
-                      aria-label={`Select ${s.id}`}
-                      checked={selected.includes(s.id)}
+                      aria-label={`Select ${e.name}`}
+                      checked={selected.includes(e.name)}
                       onCheckedChange={(checked) =>
-                        setSelected((previous) =>
-                          checked ? [...previous, s.id] : previous.filter((id) => id !== s.id),
+                        setSelected((prev) =>
+                          checked ? [...prev, e.name] : prev.filter((n) => n !== e.name),
                         )
                       }
                     />
                   </TableCell>
                   <TableCell>
                     <span
-                      className={`state-text ${s.status === "Mounted" ? "text-cyan" : s.status === "Unlinked" ? "muted" : "text-amber"}`}
+                      className={`state-text ${
+                        e.status === "Linked"
+                          ? "text-cyan"
+                          : e.status === "Inactive"
+                            ? "muted"
+                            : "text-amber"
+                      }`}
                     >
                       <i />
-                      {s.status}
+                      {e.status}
                     </span>
                   </TableCell>
                   <TableCell>
-                    <button className="skill-name" onClick={() => onInspect(s.id)}>
-                      {s.id}
+                    <button className="skill-name" onClick={() => onInspect(e.name)}>
+                      {e.name}
                       <ChevronRight />
                     </button>
-                    <p className="row-description">{s.description}</p>
+                    {e.status === "Unmanaged" && (
+                      <p className="row-description muted">Not yet imported into the library.</p>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <Status tone="muted">{s.category}</Status>
-                    <span className="stack-label">{s.stack}</span>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      aria-label={`Toggle ${s.id}`}
-                      checked={s.enabled}
-                      disabled={s.status === "Broken" || s.status === "Collision"}
-                      onCheckedChange={(checked) => toggleSkill(s.id, checked)}
-                    />
+                    {e.inLibrary ? (
+                      <Switch
+                        aria-label={`Toggle ${e.name}`}
+                        checked={active ? isEnabled(active, "skills", e.name) : false}
+                        onCheckedChange={(checked) => void toggleSkill(e.name, checked)}
+                      />
+                    ) : (
+                      <span className="muted micro">Import first</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          {!filteredSkills.length && (
+          {!filteredEntries.length && (
             <div className="empty-state">
               <Search />
-              <h3>No matching capabilities</h3>
+              <h3>No matching skills</h3>
               <p>Try another search or reset the filters.</p>
             </div>
           )}
           <div className="table-footer">
             <span>
-              Showing {filteredSkills.length} of {skills.length} registered skills
+              Showing {filteredEntries.length} of {entries.length} skills
             </span>
-            <span className="text-cyan">{linked} mounted</span>
+            <span className="text-cyan">{linkedCount} linked</span>
           </div>
         </section>
-        {inspectedSkill && (
-          <SkillInspector skill={inspectedSkill} onClose={() => onInspect(undefined)} />
+        {inspectedEntry && (
+          <SkillInspector
+            entry={inspectedEntry}
+            activeProfileName={overview?.active ?? null}
+            onClose={() => onInspect(undefined)}
+          />
         )}
       </div>
     </>
   );
 }
 
-function SkillInspector({ skill: s, onClose }: { skill: Skill; onClose: () => void }) {
-  const { toggleSkill, setNotice } = useHarness();
+function SkillInspector({
+  entry,
+  activeProfileName,
+  onClose,
+}: {
+  entry: SkillEntry;
+  activeProfileName: string | null;
+  onClose: () => void;
+}) {
+  const { overview, saveProfile } = useHarness();
+  const active = overview?.profiles.find((p) => p.name === overview.active) ?? null;
+  const enabled = active ? isEnabled(active, "skills", entry.name) : false;
+
+  async function handleToggle(next: boolean) {
+    if (!active) return;
+    await saveProfile(toggleItem(active, "skills", entry.name, next));
+  }
+
   return (
     <Panel
-      title={s.id}
-      icon={<Terminal />}
+      title={entry.name}
+      icon={<Box />}
       className="inspector-panel"
       extra={
         <Button size="icon-xs" variant="ghost" aria-label="Close inspector" onClick={onClose}>
@@ -273,88 +326,54 @@ function SkillInspector({ skill: s, onClose }: { skill: Skill; onClose: () => vo
         </Button>
       }
     >
-      <p className="muted text-xs mb-5">Skill Inode Inspector · Preview definition</p>
+      <p className="muted text-xs mb-5">Skill Inspector · Library item</p>
       <div className="section-label">
-        Harness connection
-        <Status tone={s.status === "Mounted" ? "cyan" : "amber"}>{s.status}</Status>
+        Status
+        <Status
+          tone={
+            entry.status === "Linked" ? "cyan" : entry.status === "Unmanaged" ? "amber" : "muted"
+          }
+        >
+          {entry.status}
+        </Status>
       </div>
       <div className="detail-rows">
         <div>
-          <span>FS Sync Mode</span>
-          <code>Atomic symlink</code>
+          <span>In library</span>
+          <span className={entry.inLibrary ? "text-cyan" : "text-amber"}>
+            {entry.inLibrary ? "Yes" : "No — import required"}
+          </span>
         </div>
         <div>
-          <span>Harness Stack</span>
-          <code>{s.stack}</code>
-        </div>
-        <div>
-          <span>Category</span>
-          <code>{s.category}</code>
+          <span>Active profile</span>
+          <code>{activeProfileName ?? "—"}</code>
         </div>
       </div>
       <Separator className="my-5" />
-      <div className="section-label">Resolved path topology</div>
-      <div className="path-box">
-        <Folder />
-        <span>
-          Source definition<code>{s.source}</code>
-        </span>
+      <div className="section-label">Profile membership</div>
+      <div className="detail-rows">
+        {overview?.profiles.map((p) => (
+          <div key={p.name}>
+            <span>{p.name}</span>
+            <Status tone={isEnabled(p, "skills", entry.name) ? "cyan" : "muted"}>
+              {isEnabled(p, "skills", entry.name) ? "Enabled" : "Disabled"}
+            </Status>
+          </div>
+        ))}
       </div>
-      <ArrowDown className="path-arrow" />
-      <div className="path-box target-path">
-        <Link />
-        <span>
-          Mounted target harness<code>{s.target}</code>
-        </span>
-      </div>
-      <Separator className="my-5" />
-      <div className="section-label">
-        System rule payload
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(skillPayload(s));
-              setNotice("Skill definition copied.");
-            } catch {
-              setNotice("Clipboard unavailable. Select the definition to copy it.");
-            }
-          }}
-        >
-          <Copy />
-          Copy
-        </Button>
-      </div>
-      <pre className="payload">{skillPayload(s)}</pre>
-      <div className="section-label mt-5">Environment & permissions</div>
-      <div className="permissions">
-        <span>
-          <Check />
-          Read workspace
-        </span>
-        <span>
-          <Check />
-          Write diagnostics
-        </span>
-        <span className="muted">
-          <X />
-          No shell execution
-        </span>
-        <span className="muted">
-          <X />
-          No web access
-        </span>
-      </div>
-      <div className="inspector-bottom">
-        <span>Enable in preview</span>
-        <Switch
-          aria-label={`Enable ${s.id} in inspector`}
-          checked={s.enabled}
-          disabled={s.status === "Broken" || s.status === "Collision"}
-          onCheckedChange={(enabled) => toggleSkill(s.id, enabled)}
-        />
-      </div>
+      {entry.inLibrary && (
+        <>
+          <Separator className="my-5" />
+          <div className="inspector-bottom">
+            <span>Enable in active profile</span>
+            <Switch
+              aria-label={`Enable ${entry.name}`}
+              checked={enabled}
+              onCheckedChange={(v) => void handleToggle(v)}
+            />
+          </div>
+        </>
+      )}
     </Panel>
   );
 }
