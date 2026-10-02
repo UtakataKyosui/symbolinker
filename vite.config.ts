@@ -14,10 +14,10 @@ export default defineConfig(() => ({
     tailwindcss(),
   ]),
   fmt: {
-    ignorePatterns: ["src/routeTree.gen.ts"],
+    ignorePatterns: ["src/routeTree.gen.ts", "src/bindings.ts"],
   },
   lint: {
-    ignorePatterns: ["src/routeTree.gen.ts"],
+    ignorePatterns: ["src/routeTree.gen.ts", "src/bindings.ts"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

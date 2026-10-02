@@ -25,3 +25,7 @@ release. Add a tool name to select part of the graph. For example, run
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->
+
+## Glossary
+
+ドメイン用語(Agent / Harness / Kind / Item / Profile / Library / Adopt / Import など)の定義は `.claude/rules/glossary.md` を参照し、コード・UI・ドキュメントではそこに定めた用語を使う。
