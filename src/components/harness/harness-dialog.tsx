@@ -10,13 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useHarness } from "@/lib/harness-context";
+import { useUIState } from "@/lib/ui-state-context";
+import { useAdopt, useImportUnmanaged, useSaveProfile } from "@/lib/use-overview";
+import { errorMessage } from "@/lib/agent-result";
 import type { Items } from "@/bindings";
 
 const EMPTY_ITEMS: Items = { skills: [], agents: [], hooks: [], rules: [] };
 
 export function HarnessDialog() {
-  const { dialog, setDialog } = useHarness();
+  const { dialog, setDialog } = useUIState();
   return (
     <Dialog
       open={dialog !== null}
@@ -34,12 +36,17 @@ export function HarnessDialog() {
 }
 
 function AdoptDialog() {
-  const { adopt, setDialog, setNotice, loading } = useHarness();
+  const { setDialog, setNotice } = useUIState();
+  const adopt = useAdopt();
 
   async function handleAdopt() {
-    await adopt();
-    setDialog(null);
-    setNotice("Agent adopted. Default profile created.");
+    try {
+      await adopt.mutateAsync();
+      setDialog(null);
+      setNotice("Agent adopted. Default profile created.");
+    } catch {
+      /* error shown via adopt.error below */
+    }
   }
 
   return (
@@ -51,11 +58,12 @@ function AdoptDialog() {
           create a default profile with everything enabled. This is a one-time operation per agent.
         </DialogDescription>
       </DialogHeader>
+      {adopt.error && <p className="text-xs text-amber mt-2">{errorMessage(adopt.error)}</p>}
       <DialogFooter>
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button onClick={() => void handleAdopt()} disabled={loading}>
+        <Button onClick={() => void handleAdopt()} disabled={adopt.isPending}>
           <PackagePlus />
           Adopt
         </Button>
@@ -65,12 +73,17 @@ function AdoptDialog() {
 }
 
 function ImportDialog() {
-  const { importUnmanaged, setDialog, setNotice, loading } = useHarness();
+  const { setDialog, setNotice } = useUIState();
+  const importUnmanaged = useImportUnmanaged();
 
   async function handleImport() {
-    await importUnmanaged();
-    setDialog(null);
-    setNotice("Unmanaged items imported into the active profile.");
+    try {
+      await importUnmanaged.mutateAsync();
+      setDialog(null);
+      setNotice("Unmanaged items imported into the active profile.");
+    } catch {
+      /* error shown via importUnmanaged.error below */
+    }
   }
 
   return (
@@ -82,11 +95,14 @@ function ImportDialog() {
           the active profile.
         </DialogDescription>
       </DialogHeader>
+      {importUnmanaged.error && (
+        <p className="text-xs text-amber mt-2">{errorMessage(importUnmanaged.error)}</p>
+      )}
       <DialogFooter>
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button onClick={() => void handleImport()} disabled={loading}>
+        <Button onClick={() => void handleImport()} disabled={importUnmanaged.isPending}>
           <FolderInput />
           Import
         </Button>
@@ -96,16 +112,21 @@ function ImportDialog() {
 }
 
 function NewProfileDialog() {
-  const { saveProfile, setDialog, setNotice, loading } = useHarness();
+  const { setDialog, setNotice } = useUIState();
+  const saveProfile = useSaveProfile();
   const [name, setName] = useState("");
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    await saveProfile({ name: trimmed, enabled: EMPTY_ITEMS });
-    setDialog(null);
-    setNotice(`Profile "${trimmed}" created.`);
+    try {
+      await saveProfile.mutateAsync({ name: trimmed, enabled: EMPTY_ITEMS });
+      setDialog(null);
+      setNotice(`Profile "${trimmed}" created.`);
+    } catch {
+      /* error shown via saveProfile.error below */
+    }
   }
 
   return (
@@ -126,11 +147,14 @@ function NewProfileDialog() {
           placeholder="my-profile"
         />
       </label>
+      {saveProfile.error && (
+        <p className="text-xs text-amber mt-2">{errorMessage(saveProfile.error)}</p>
+      )}
       <DialogFooter className="mt-4">
         <Button variant="outline" type="button" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button type="submit" disabled={loading || !name.trim()}>
+        <Button type="submit" disabled={saveProfile.isPending || !name.trim()}>
           <Plus />
           Create Profile
         </Button>

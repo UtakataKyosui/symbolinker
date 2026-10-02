@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, createRootRoute, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
+  QueryClient,
+  QueryClientProvider,
+  useIsFetching,
+  useIsMutating,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
   Box,
   CircleCheck,
   FolderInput,
@@ -22,7 +29,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HarnessDialog } from "@/components/harness/harness-dialog";
 import { PageHeading, Status } from "@/components/harness/primitives";
-import { HarnessProvider, useHarness } from "@/lib/harness-context";
+import { AgentProvider, useAgent } from "@/lib/agent-context";
+import { UIStateProvider, useUIState } from "@/lib/ui-state-context";
+import { useOverview } from "@/lib/use-overview";
+import { events } from "@/bindings";
 import type { Agent } from "@/bindings";
 
 export const Route = createRootRoute({
@@ -58,37 +68,58 @@ const AGENT_LABELS: Record<Agent, string> = {
   codex: "Codex",
 };
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { networkMode: "always" },
+    mutations: { networkMode: "always" },
+  },
+});
+
 function RootLayout() {
   return (
-    <HarnessProvider>
-      <AppShell />
-    </HarnessProvider>
+    <QueryClientProvider client={queryClient}>
+      <AgentProvider>
+        <UIStateProvider>
+          <AppShell />
+        </UIStateProvider>
+      </AgentProvider>
+    </QueryClientProvider>
   );
 }
 
 function AppShell() {
-  const {
-    agent,
-    setAgent,
-    overview,
-    loading,
-    error,
-    query,
-    setQuery,
-    notice,
-    setNotice,
-    setDialog,
-  } = useHarness();
+  const { agent, setAgent } = useAgent();
+  const { query, setQuery, notice, setNotice, setDialog } = useUIState();
+  const { data: overview, isLoading, error } = useOverview();
+  const isFetching = useIsFetching();
+  const isMutating = useIsMutating();
+  const qc = useQueryClient();
 
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const loading = isFetching > 0 || isMutating > 0;
+
   const linkedCount = overview?.links.find((l) => l.kind === "skills")?.linked.length ?? 0;
   const skillCount = overview?.library.skills.length ?? 0;
   const hookCount = overview?.library.hooks.length ?? 0;
   const hasUnmanaged = overview?.links.some((l) => l.unmanaged.length > 0) ?? false;
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    void events.overviewChanged
+      .listen(({ payload }) => {
+        void qc.invalidateQueries({ queryKey: ["overview", payload.agent], exact: true });
+      })
+      .then((unlisten) => {
+        cleanup = unlisten;
+      });
+    return () => {
+      cleanup?.();
+    };
+  }, [qc]);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -203,7 +234,7 @@ function AppShell() {
           </div>
           <div className="engine-indicator">
             <span className={`status-dot ${overview ? "status-connected" : ""}`} />
-            <span>{overview ? "Connected" : loading ? "Connecting…" : "Disconnected"}</span>
+            <span>{overview ? "Connected" : isLoading ? "Connecting…" : "Disconnected"}</span>
             <RefreshCw />
           </div>
           <Link
@@ -221,7 +252,7 @@ function AppShell() {
         {error && (
           <div className="banner banner-error" role="alert">
             <TriangleAlert size={16} />
-            <span>{error}</span>
+            <span>{error instanceof Error ? error.message : String(error)}</span>
           </div>
         )}
         {overview && !overview.adopted && (

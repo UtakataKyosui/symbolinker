@@ -14,7 +14,8 @@ import {
 import { PageHeading, Panel, Status } from "@/components/harness/primitives";
 import { ProfileCards } from "@/components/harness/profile-cards";
 import { isEnabled, toggleItem, enabledCount } from "@/lib/agent-profiles";
-import { useHarness } from "@/lib/harness-context";
+import { useUIState } from "@/lib/ui-state-context";
+import { useOverview, useSaveProfile, useDeleteProfile } from "@/lib/use-overview";
 import type { Kind, Profile } from "@/bindings";
 
 export const Route = createFileRoute("/profiles")({
@@ -30,7 +31,10 @@ const KIND_LABELS: Record<Kind, string> = {
 };
 
 function ProfilesPage() {
-  const { overview, saveProfile, deleteProfile, setDialog } = useHarness();
+  const { setDialog } = useUIState();
+  const { data: overview } = useOverview();
+  const saveProfile = useSaveProfile();
+  const deleteProfile = useDeleteProfile();
   const [editingName, setEditingName] = useState<string | null>(null);
 
   const profiles = overview?.profiles ?? [];
@@ -38,12 +42,12 @@ function ProfilesPage() {
   const editingProfile = profiles.find((p) => p.name === editingName) ?? null;
 
   async function handleToggle(profile: Profile, kind: Kind, name: string, enabled: boolean) {
-    await saveProfile(toggleItem(profile, kind, name, enabled));
+    await saveProfile.mutateAsync(toggleItem(profile, kind, name, enabled));
   }
 
   async function handleDelete(name: string) {
     if (name === active) return;
-    await deleteProfile(name);
+    await deleteProfile.mutateAsync(name);
     if (editingName === name) setEditingName(null);
   }
 
@@ -151,7 +155,7 @@ function ProfilesPage() {
                                       for (const name of items) {
                                         profile = toggleItem(profile, kind, name, !!checked);
                                       }
-                                      void saveProfile(profile);
+                                      void saveProfile.mutateAsync(profile);
                                     }}
                                   />
                                 </TableHead>
