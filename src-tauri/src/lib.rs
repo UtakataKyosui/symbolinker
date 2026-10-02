@@ -2,6 +2,7 @@ mod agent;
 mod commands;
 mod error;
 mod fsops;
+mod hook_meta;
 mod import;
 mod inspect;
 mod layout;
@@ -35,6 +36,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::delete_profile,
         commands::activate_profile,
         commands::unlink_kind,
+        commands::get_hook_meta,
+        commands::save_hook_meta,
     ])
 }
 

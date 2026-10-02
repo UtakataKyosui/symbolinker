@@ -4,8 +4,8 @@ use tauri::Manager;
 use crate::agent::{Agent, Kind};
 use crate::error::SymlinkError;
 use crate::layout::Layout;
-use crate::model::{Profile, Overview};
-use crate::{inspect, service};
+use crate::model::{HookMeta, Overview, Profile};
+use crate::{hook_meta, inspect, service};
 
 fn layout_for(app: &tauri::AppHandle, agent: Agent) -> Result<Layout, SymlinkError> {
     let root = app
@@ -57,4 +57,16 @@ pub fn activate_profile(app: tauri::AppHandle, agent: Agent, name: String) -> Re
 #[specta::specta]
 pub fn unlink_kind(app: tauri::AppHandle, agent: Agent, kind: Kind) -> Result<(), SymlinkError> {
     service::unlink_kind(&layout_for(&app, agent)?, kind)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_hook_meta(app: tauri::AppHandle, agent: Agent, name: String) -> Result<HookMeta, SymlinkError> {
+    hook_meta::load(&layout_for(&app, agent)?, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_hook_meta(app: tauri::AppHandle, agent: Agent, name: String, meta: HookMeta) -> Result<(), SymlinkError> {
+    hook_meta::save(&layout_for(&app, agent)?, &name, &meta)
 }

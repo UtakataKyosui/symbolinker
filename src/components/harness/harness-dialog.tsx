@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, Plus } from "lucide-react";
+import { FolderInput, PackagePlus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,9 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Picker } from "@/components/harness/primitives";
-import { downloadJson } from "@/lib/download-json";
 import { useHarness } from "@/lib/harness-context";
+import type { Items } from "@/bindings";
+
+const EMPTY_ITEMS: Items = { skills: [], agents: [], hooks: [], rules: [] };
 
 export function HarnessDialog() {
   const { dialog, setDialog } = useHarness();
@@ -24,174 +25,114 @@ export function HarnessDialog() {
       }}
     >
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {dialog === "apply"
-              ? "Review Harness Configuration"
-              : dialog === "target"
-                ? "Add Agent Target"
-                : "New Lifecycle Hook"}
-          </DialogTitle>
-          <DialogDescription>
-            {dialog === "apply"
-              ? "Export this preview configuration for your harness. Filesystem changes are not executed by this UI."
-              : "Add a configuration entry to the local UI preview."}
-          </DialogDescription>
-        </DialogHeader>
-        {dialog === "apply" ? <ApplyReview /> : <DraftForm key={dialog} kind={dialog} />}
+        {dialog === "adopt" && <AdoptDialog />}
+        {dialog === "import" && <ImportDialog />}
+        {dialog === "new-profile" && <NewProfileDialog />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function ApplyReview() {
-  const { skills, hooks, targets, activeProfile, enabledHooks, root, vault, setDialog, setNotice } =
-    useHarness();
+function AdoptDialog() {
+  const { adopt, setDialog, setNotice, loading } = useHarness();
+
+  async function handleAdopt() {
+    await adopt();
+    setDialog(null);
+    setNotice("Agent adopted. Default profile created.");
+  }
+
   return (
     <>
-      <div className="detail-rows">
-        <div>
-          <span>Selected profile</span>
-          <strong>{activeProfile.name}</strong>
-        </div>
-        <div>
-          <span>Enabled skills</span>
-          <strong>{skills.filter((s) => s.enabled).length}</strong>
-        </div>
-        <div>
-          <span>Enabled hooks</span>
-          <strong>{enabledHooks}</strong>
-        </div>
-        <div>
-          <span>Unresolved definitions</span>
-          <span className="text-amber">
-            {skills.filter((s) => s.status === "Broken" || s.status === "Collision").length}
-          </span>
-        </div>
-      </div>
+      <DialogHeader>
+        <DialogTitle>Adopt Agent</DialogTitle>
+        <DialogDescription>
+          Move all existing items from the agent config directory into the managed library and
+          create a default profile with everything enabled. This is a one-time operation per agent.
+        </DialogDescription>
+      </DialogHeader>
       <DialogFooter>
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button
-          onClick={() => {
-            downloadJson("harness-config.json", {
-              mode: "preview",
-              profile: activeProfile.name,
-              skills,
-              hooks,
-              targets,
-              workspace: root,
-              vault,
-            });
-            setDialog(null);
-            setNotice("Harness configuration exported.");
-          }}
-        >
-          <Download />
-          Export Configuration
+        <Button onClick={() => void handleAdopt()} disabled={loading}>
+          <PackagePlus />
+          Adopt
         </Button>
       </DialogFooter>
     </>
   );
 }
 
-function DraftForm({ kind }: { kind: "target" | "hook" | null }) {
-  const { hooks, setHooks, targets, setTargets, setDialog, setNotice } = useHarness();
-  const [draftName, setDraftName] = useState("");
-  const [draftPath, setDraftPath] = useState("");
-  const [draftEvent, setDraftEvent] = useState("on-file-write");
+function ImportDialog() {
+  const { importUnmanaged, setDialog, setNotice, loading } = useHarness();
 
-  function saveDraft() {
-    if (!draftName.trim() || (kind === "target" && !draftPath.trim())) return;
-    if (kind === "target") {
-      if (targets.some((t) => t.path === draftPath.trim())) {
-        setNotice("This target directory is already configured.");
-        return;
-      }
-      setTargets((previous) => [
-        ...previous,
-        {
-          name: draftName.trim(),
-          path: draftPath.trim(),
-          detail: "Ready to configure",
-          healthy: true,
-        },
-      ]);
-    }
-    if (kind === "hook") {
-      if (hooks.some((h) => h.id === draftName.trim())) {
-        setNotice("This hook identifier already exists.");
-        return;
-      }
-      setHooks((previous) => [
-        ...previous,
-        {
-          id: draftName.trim(),
-          event: draftEvent,
-          description: "Custom lifecycle rule. Configure the executable in your harness.",
-          group:
-            draftEvent === "on-file-write"
-              ? "file"
-              : draftEvent === "on-tool-failure"
-                ? "error"
-                : "tool",
-          runtime: "Local Shell",
-          timeout: "1000ms",
-          order: "P10",
-          enabled: false,
-        },
-      ]);
-    }
-    setNotice(`${kind === "target" ? "Target" : "Hook"} added to preview.`);
+  async function handleImport() {
+    await importUnmanaged();
     setDialog(null);
+    setNotice("Unmanaged items imported into the active profile.");
   }
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        saveDraft();
-      }}
-    >
-      <label className="form-field">
-        {kind === "target" ? "Target name" : "Hook identifier"}
-        <Input
-          autoFocus
-          required
-          value={draftName}
-          onChange={(e) => setDraftName(e.target.value)}
-          placeholder={kind === "target" ? "Codex Workspace" : "my-custom-hook"}
-        />
-      </label>
-      {kind === "target" ? (
-        <label className="form-field">
-          Target directory
-          <Input
-            required
-            value={draftPath}
-            onChange={(e) => setDraftPath(e.target.value)}
-            placeholder="~/.codex/skills"
-          />
-        </label>
-      ) : (
-        <div className="form-field">
-          <span>Lifecycle event</span>
-          <Picker
-            label="Hook lifecycle event"
-            value={draftEvent}
-            options={["on-file-write", "post-tool-call", "pre-destructive-tool", "on-tool-failure"]}
-            onChange={setDraftEvent}
-          />
-        </div>
-      )}
+    <>
+      <DialogHeader>
+        <DialogTitle>Import Unmanaged Items</DialogTitle>
+        <DialogDescription>
+          Move newly placed items from the agent config directory into the library and add them to
+          the active profile.
+        </DialogDescription>
+      </DialogHeader>
       <DialogFooter>
         <Button variant="outline" onClick={() => setDialog(null)}>
           Cancel
         </Button>
-        <Button type="submit">
+        <Button onClick={() => void handleImport()} disabled={loading}>
+          <FolderInput />
+          Import
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function NewProfileDialog() {
+  const { saveProfile, setDialog, setNotice, loading } = useHarness();
+  const [name, setName] = useState("");
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await saveProfile({ name: trimmed, enabled: EMPTY_ITEMS });
+    setDialog(null);
+    setNotice(`Profile "${trimmed}" created.`);
+  }
+
+  return (
+    <form onSubmit={(e) => void handleSave(e)}>
+      <DialogHeader>
+        <DialogTitle>New Profile</DialogTitle>
+        <DialogDescription>
+          Create a new empty profile. Items can be added from the Profiles page.
+        </DialogDescription>
+      </DialogHeader>
+      <label className="form-field mt-4">
+        Profile name
+        <Input
+          autoFocus
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="my-profile"
+        />
+      </label>
+      <DialogFooter className="mt-4">
+        <Button variant="outline" type="button" onClick={() => setDialog(null)}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={loading || !name.trim()}>
           <Plus />
-          Add {kind === "target" ? "Target" : "Hook"}
+          Create Profile
         </Button>
       </DialogFooter>
     </form>

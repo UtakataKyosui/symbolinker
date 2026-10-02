@@ -12,10 +12,26 @@ export const commands = {
 	deleteProfile: (agent: Agent, name: string) => typedError<null, string>(__TAURI_INVOKE("delete_profile", { agent, name })),
 	activateProfile: (agent: Agent, name: string) => typedError<null, string>(__TAURI_INVOKE("activate_profile", { agent, name })),
 	unlinkKind: (agent: Agent, kind: Kind) => typedError<null, string>(__TAURI_INVOKE("unlink_kind", { agent, kind })),
+	getHookMeta: (agent: Agent, name: string) => typedError<HookMeta, string>(__TAURI_INVOKE("get_hook_meta", { agent, name })),
+	saveHookMeta: (agent: Agent, name: string, meta: HookMeta) => typedError<null, string>(__TAURI_INVOKE("save_hook_meta", { agent, name, meta })),
 };
 
 /* Types */
 export type Agent = "claude" | "codex";
+
+/**  Hook 1 件に付随するメタデータ。フィールドはすべて省略可能で、未設定の場合は None。 */
+export type HookMeta = {
+	/**  トリガーするイベント種別 (例: "PreToolUse", "PostToolUse", "PreCompact") */
+	event: string | null,
+	/**  実行ランタイム (例: "bash", "python3") */
+	runtime: string | null,
+	/**  タイムアウト秒数 */
+	timeout: number | null,
+	/**  同一イベント内での実行順 */
+	order: number | null,
+	/**  人が読む説明文 */
+	description: string | null,
+};
 
 /**  種類ごとの項目名の一覧。ライブラリの内容にも、 Profile の有効項目にも使う。 */
 export type Items = {

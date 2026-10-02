@@ -1,18 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Activity,
-  ArrowRight,
-  Link2Off,
-  Plus,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Terminal,
-  Zap,
-} from "lucide-react";
+import { ChevronRight, Search, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -22,257 +13,359 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Metric, PageHeading, Panel, Picker, Status } from "@/components/harness/primitives";
+import { Metric, PageHeading, Panel, Status } from "@/components/harness/primitives";
+import { isEnabled, toggleItem } from "@/lib/agent-profiles";
+import { agentApi } from "@/lib/agent-api";
 import { useHarness } from "@/lib/harness-context";
-import type { Hook } from "@/lib/harness-data";
-
-const hookTabs = [
-  ["all", "All Hooks"],
-  ["prompt", "Pre-Prompt"],
-  ["tool", "Tool Execution"],
-  ["file", "File Watchers"],
-  ["error", "Error Handlers"],
-] as const;
-type HookTab = (typeof hookTabs)[number][0];
+import type { Agent, HookMeta } from "@/bindings";
 
 export const Route = createFileRoute("/hooks")({
-  validateSearch: (search: Record<string, unknown>): { tab?: HookTab } => ({
-    tab: hookTabs.find(([value]) => value === search.tab)?.[0],
-  }),
   component: HooksPage,
 });
 
-function HooksPage() {
-  const { hooks, setHooks, query, setQuery, enabledHooks, setDialog } = useHarness();
-  const { tab: hookTab = "all" } = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const [sandboxEvent, setSandboxEvent] = useState("on-file-write");
-  const [sandboxLog, setSandboxLog] = useState([
-    "[HarnessDaemon] Demo sandbox ready.",
-    "Select an event to preview lifecycle dispatch.",
-  ]);
-  const filteredHooks = hooks.filter(
-    (h) =>
-      (hookTab === "all" || hookTab === h.group) &&
-      `${h.id} ${h.event} ${h.description}`.toLowerCase().includes(query.toLowerCase()),
-  );
+const HOOK_EVENTS = ["PreToolUse", "PostToolUse", "PreCompact", "Notification", "Stop"] as const;
 
-  function runSandbox(hook?: Hook) {
-    const matching = hook ? [hook] : hooks.filter((h) => h.event === sandboxEvent);
-    const log = [`[TriggerDispatch] Preview event: ${hook?.event ?? sandboxEvent}`];
-    matching.forEach((h) =>
-      log.push(
-        h.error
-          ? `[ERROR] ${h.id}: ${h.error}`
-          : !h.enabled
-            ? `[SKIPPED] ${h.id}: disabled`
-            : `[PASS] ${h.id} · ${h.runtime} · timeout ${h.timeout}`,
-      ),
-    );
-    if (!matching.length) log.push("[INFO] No hooks registered for this event.");
-    log.push("[Preview] Simulation complete. No commands were executed.");
-    setSandboxLog(log);
+const TIMEOUT_MAX = 4_294_967_295;
+const ORDER_MIN = -2_147_483_648;
+const ORDER_MAX = 2_147_483_647;
+
+function HooksPage() {
+  const { agent, overview, loading, saveProfile, query, setQuery } = useHarness();
+  const [inspected, setInspected] = useState<string | undefined>();
+  const [metaVersion, setMetaVersion] = useState(0);
+
+  const active = overview?.profiles.find((p) => p.name === overview.active) ?? null;
+  const allHooks = overview?.library.hooks ?? [];
+  const enabledHooks = active?.enabled.hooks ?? [];
+  const filteredHooks = allHooks.filter((name) => name.toLowerCase().includes(query.toLowerCase()));
+
+  async function handleToggle(name: string, enabled: boolean) {
+    if (!active) return;
+    await saveProfile(toggleItem(active, "hooks", name, enabled));
   }
 
   return (
     <>
       <PageHeading
-        eyebrow="Runtime Engine / Symlink Subsystem"
-        title="Hooks & Execution Rules"
-        description="Configure lifecycle hooks, prompt interception barriers, and file-change trigger harnesses."
-        actions={
-          <>
-            <Button variant="outline" onClick={() => runSandbox()}>
-              <Terminal />
-              Test Trigger
-            </Button>
-            <Button variant="outline" onClick={() => setDialog("apply")}>
-              <RefreshCw />
-              Sync to Runtime
-            </Button>
-            <Button onClick={() => setDialog("hook")}>
-              <Plus />
-              New Hook Rule
-            </Button>
-          </>
-        }
+        eyebrow="Agent Harness / Hooks"
+        title="Hooks & Triggers"
+        description="Configure which lifecycle hooks are active for the current agent profile."
       />
       <div className="metrics-grid small-metrics">
         <Metric
-          title="Registered hooks"
+          title="Library hooks"
           icon={<Zap />}
-          value={`${hooks.length}`}
-          badge="Lifecycle"
-          note="Configured preview rules"
+          value={`${allHooks.length}`}
+          badge="Registry"
+          note="Hooks in managed library"
           trend="cyan"
         />
         <Metric
-          title="Enabled interceptors"
-          icon={<Activity />}
-          value={`${enabledHooks}`}
-          suffix="Active"
-          note="Prompt, tool & file events"
+          title="Enabled hooks"
+          icon={<Zap />}
+          value={`${enabledHooks.length}`}
+          suffix={`/ ${allHooks.length}`}
+          note="Active in current profile"
           trend="blue"
         />
-        <Metric
-          title="Security barriers"
-          icon={<ShieldCheck />}
-          value="1"
-          suffix="Scrubber"
-          badge="Configured"
-          note="Secret interception rule"
-          trend="amber"
-        />
-        <Metric
-          title="Runtime drift status"
-          icon={<Link2Off />}
-          value="1"
-          suffix="Syntax Err"
-          badge="L14"
-          note="typecheck-validation-hook"
-          trend="amber"
-        />
       </div>
-      <section className="panel hooks-registry">
-        <div className="hooks-toolbar">
-          <Tabs
-            value={hookTab}
-            onValueChange={(value) =>
-              void navigate({
-                search: { tab: value === "all" ? undefined : (value as HookTab) },
-                replace: true,
-              })
-            }
-          >
-            <TabsList variant="line">
-              {hookTabs.map(([value, label]) => (
-                <TabsTrigger key={value} value={value}>
-                  {label}
-                  <span className="tab-count">
-                    {hooks.filter((h) => value === "all" || value === h.group).length}
-                  </span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <div className="filter-search">
-            <Search />
-            <Input
-              aria-label="Filter hooks"
-              placeholder="Search rules, paths, events..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Hook & Event Identifier</TableHead>
-              <TableHead>Runtime Target Symlink</TableHead>
-              <TableHead>Order</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Sandbox / Spec</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredHooks.map((h) => (
-              <TableRow key={h.id} className={h.error ? "warning-row" : ""}>
-                <TableCell>
-                  <strong className="mono">{h.id}</strong>
-                  <Status tone="muted">{h.event}</Status>
-                  <p className="row-description">{h.description}</p>
-                </TableCell>
-                <TableCell>
-                  <code className="hook-path">
-                    .claude/hooks/{h.id}.sh
-                    <ArrowRight />
-                    <span>~/.agent/hooks/{h.id}.sh</span>
-                  </code>
-                </TableCell>
-                <TableCell>
-                  <Status tone={h.order === "P0" ? "cyan" : "muted"}>{h.order}</Status>
-                </TableCell>
-                <TableCell>
-                  <span className={h.error ? "text-amber" : h.enabled ? "text-cyan" : "muted"}>
-                    {h.error ?? (h.enabled ? "Active (Linked)" : "Disabled")}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <code>{h.timeout}</code>
-                  <span className="stack-label">{h.runtime}</span>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`Test ${h.id}`}
-                      onClick={() => runSandbox(h)}
-                    >
-                      <Terminal />
-                    </Button>
-                    <Switch
-                      aria-label={`Enable ${h.id}`}
-                      checked={h.enabled}
-                      disabled={!!h.error}
-                      onCheckedChange={(enabled) =>
-                        setHooks((previous) =>
-                          previous.map((item) => (item.id === h.id ? { ...item, enabled } : item)),
-                        )
-                      }
-                    />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {!filteredHooks.length && (
-          <div className="empty-state">
-            <Search />
-            <h3>No matching hooks</h3>
-          </div>
-        )}
-      </section>
-      <Panel
-        title="Interactive Lifecycle Sandbox Simulator"
-        icon={<Terminal />}
-        extra={<Status tone="muted">Preview · No execution</Status>}
-      >
-        <div className="sandbox-controls">
-          <span className="mono muted">&gt; EVENT:</span>
-          <Picker
-            label="Sandbox event"
-            value={sandboxEvent}
-            options={[...new Set(hooks.map((h) => h.event))]}
-            onChange={setSandboxEvent}
-          />
-          <Button onClick={() => runSandbox()}>
-            <Zap />
-            Run Trigger Cycle
-          </Button>
-        </div>
-        <div className="terminal-output" aria-live="polite">
-          {sandboxLog.map((line, i) => (
-            <div
-              className={
-                line.includes("ERROR")
-                  ? "text-amber"
-                  : line.includes("PASS")
-                    ? "text-cyan"
-                    : "muted"
-              }
-              key={`${line}-${i}`}
-            >
-              <span className="terminal-line-number">{String(i + 1).padStart(2, "0")}</span>
-              {line}
+      <div className={`skills-layout ${inspected ? "with-inspector" : ""}`}>
+        <Panel title="Hook Registry" icon={<Zap />}>
+          <div className="filter-bar">
+            <div className="filter-search">
+              <Search />
+              <Input
+                aria-label="Filter hooks"
+                placeholder="Filter by name..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
             </div>
-          ))}
-        </div>
-      </Panel>
+          </div>
+          {filteredHooks.length === 0 ? (
+            <div className="empty-state">
+              <Zap />
+              <h3>{allHooks.length === 0 ? "No hooks in library" : "No matching hooks"}</h3>
+              {allHooks.length === 0 && (
+                <p>Add hook directories to the agent config to get started.</p>
+              )}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Hook name</TableHead>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Runtime</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Enable</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredHooks.map((name) => {
+                  const enabled = active ? isEnabled(active, "hooks", name) : false;
+                  return (
+                    <HookRow
+                      key={name}
+                      agent={agent}
+                      name={name}
+                      enabled={enabled}
+                      disabled={loading}
+                      metaVersion={metaVersion}
+                      inspected={inspected === name}
+                      onInspect={() => setInspected(inspected === name ? undefined : name)}
+                      onToggle={(v) => void handleToggle(name, v)}
+                    />
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </Panel>
+        {inspected && (
+          <HookInspector
+            agent={agent}
+            name={inspected}
+            onClose={() => setInspected(undefined)}
+            onSaved={() => setMetaVersion((v) => v + 1)}
+          />
+        )}
+      </div>
     </>
+  );
+}
+
+function HookRow({
+  agent,
+  name,
+  enabled,
+  disabled,
+  metaVersion,
+  inspected,
+  onInspect,
+  onToggle,
+}: {
+  agent: Agent;
+  name: string;
+  enabled: boolean;
+  disabled: boolean;
+  metaVersion: number;
+  inspected: boolean;
+  onInspect: () => void;
+  onToggle: (v: boolean) => void;
+}) {
+  const [meta, setMeta] = useState<HookMeta | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    agentApi
+      .getHookMeta(agent, name)
+      .then((m) => {
+        if (!cancelled) setMeta(m);
+      })
+      .catch(() => {
+        if (!cancelled) setMeta(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent, name, metaVersion]);
+
+  return (
+    <TableRow className={inspected ? "selected-row" : ""}>
+      <TableCell>
+        <button className="skill-name" onClick={onInspect}>
+          <strong className="mono">{name}</strong>
+          <ChevronRight />
+        </button>
+      </TableCell>
+      <TableCell>
+        {meta?.event ? (
+          <code className="text-xs">{meta.event}</code>
+        ) : (
+          <span className="muted micro">—</span>
+        )}
+      </TableCell>
+      <TableCell>
+        {meta?.runtime ? (
+          <code className="text-xs">{meta.runtime}</code>
+        ) : (
+          <span className="muted micro">—</span>
+        )}
+      </TableCell>
+      <TableCell>
+        <span className={enabled ? "text-cyan" : "muted"}>
+          {enabled ? "Active (Linked)" : "Disabled"}
+        </span>
+      </TableCell>
+      <TableCell>
+        <Switch
+          aria-label={`Enable ${name}`}
+          checked={enabled}
+          disabled={disabled}
+          onCheckedChange={onToggle}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}
+
+const EMPTY_META: HookMeta = {
+  event: null,
+  runtime: null,
+  timeout: null,
+  order: null,
+  description: null,
+};
+
+function HookInspector({
+  agent,
+  name,
+  onClose,
+  onSaved,
+}: {
+  agent: Agent;
+  name: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [meta, setMeta] = useState<HookMeta>(EMPTY_META);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedOk, setSavedOk] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMeta(EMPTY_META);
+    setSaveError(null);
+    setSavedOk(false);
+    agentApi
+      .getHookMeta(agent, name)
+      .then((m) => {
+        if (!cancelled) setMeta(m);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [agent, name]);
+
+  function validateMeta(): string | null {
+    if (meta.timeout !== null && (meta.timeout < 0 || meta.timeout > TIMEOUT_MAX)) {
+      return `Timeout must be 0–${TIMEOUT_MAX}`;
+    }
+    if (meta.order !== null && (meta.order < ORDER_MIN || meta.order > ORDER_MAX)) {
+      return `Order must be ${ORDER_MIN}–${ORDER_MAX}`;
+    }
+    return null;
+  }
+
+  async function handleSave() {
+    const err = validateMeta();
+    if (err) {
+      setSaveError(err);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    setSavedOk(false);
+    try {
+      await agentApi.saveHookMeta(agent, name, meta);
+      setSavedOk(true);
+      onSaved();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Panel
+      title={name}
+      icon={<Zap />}
+      className="inspector-panel"
+      extra={
+        <Button size="icon-xs" variant="ghost" aria-label="Close inspector" onClick={onClose}>
+          <X />
+        </Button>
+      }
+    >
+      <p className="muted text-xs mb-5">Hook Inspector · Metadata</p>
+      <div className="section-label">Trigger Event</div>
+      <div className="flex flex-wrap gap-1 mb-4">
+        {HOOK_EVENTS.map((ev) => (
+          <button
+            key={ev}
+            className={`micro px-2 py-0.5 rounded border ${
+              meta.event === ev
+                ? "border-[var(--color-cyan)] text-cyan bg-[color-mix(in_srgb,var(--color-cyan)_10%,transparent)]"
+                : "border-[var(--color-border)] muted"
+            }`}
+            onClick={() => setMeta((m) => ({ ...m, event: m.event === ev ? null : ev }))}
+          >
+            {ev}
+          </button>
+        ))}
+      </div>
+      <Separator className="my-4" />
+      <div className="detail-rows">
+        <div>
+          <span>Runtime</span>
+          <Input
+            className="h-6 text-xs w-32"
+            placeholder="bash"
+            value={meta.runtime ?? ""}
+            onChange={(e) => setMeta((m) => ({ ...m, runtime: e.target.value || null }))}
+          />
+        </div>
+        <div>
+          <span>Timeout (s)</span>
+          <Input
+            className="h-6 text-xs w-24"
+            type="number"
+            min={0}
+            max={TIMEOUT_MAX}
+            placeholder="—"
+            value={meta.timeout ?? ""}
+            onChange={(e) =>
+              setMeta((m) => ({ ...m, timeout: e.target.value ? Number(e.target.value) : null }))
+            }
+          />
+        </div>
+        <div>
+          <span>Order</span>
+          <Input
+            className="h-6 text-xs w-24"
+            type="number"
+            min={ORDER_MIN}
+            max={ORDER_MAX}
+            placeholder="—"
+            value={meta.order ?? ""}
+            onChange={(e) =>
+              setMeta((m) => ({ ...m, order: e.target.value ? Number(e.target.value) : null }))
+            }
+          />
+        </div>
+      </div>
+      <Separator className="my-4" />
+      <div className="section-label">Description</div>
+      <textarea
+        className="w-full text-xs bg-transparent border border-[var(--color-border)] rounded p-2 resize-none text-[var(--color-fg)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-cyan)]"
+        rows={3}
+        placeholder="Describe what this hook does..."
+        value={meta.description ?? ""}
+        onChange={(e) => setMeta((m) => ({ ...m, description: e.target.value || null }))}
+      />
+      {saveError && <p className="text-xs text-amber mt-2">{saveError}</p>}
+      <div className="inspector-bottom mt-4">
+        <Status tone={savedOk ? "cyan" : "muted"}>
+          {savedOk ? "Saved" : saving ? "Saving…" : "Ready"}
+        </Status>
+        <Button size="xs" onClick={() => void handleSave()} disabled={saving}>
+          Save Metadata
+        </Button>
+      </div>
+    </Panel>
   );
 }

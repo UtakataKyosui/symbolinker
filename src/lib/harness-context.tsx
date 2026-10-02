@@ -1,111 +1,163 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { initialHooks, initialSkills, initialTargets, profiles } from "@/lib/harness-data";
-import { applyProfile, restorePreviewState, setSkillEnabled } from "@/lib/harness-state";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type { Agent, Kind, Overview, Profile } from "@/bindings";
+import { agentApi } from "@/lib/agent-api";
 
-export type DialogKind = "apply" | "target" | "hook";
+export type DialogKind = "adopt" | "import" | "new-profile";
 
-function useSavedState<T>(key: string, fallback: T) {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      return restorePreviewState(localStorage.getItem(`harness-preview-v1:${key}`), fallback);
-    } catch {
-      return fallback;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(`harness-preview-v1:${key}`, JSON.stringify(value));
-    } catch {
-      /* Storage may be disabled. */
-    }
-  }, [key, value]);
-  return [value, setValue] as const;
+type HarnessContextValue = {
+  agent: Agent;
+  setAgent: (agent: Agent) => void;
+  overview: Overview | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  adopt: () => Promise<void>;
+  importUnmanaged: () => Promise<void>;
+  saveProfile: (profile: Profile) => Promise<void>;
+  activateProfile: (name: string) => Promise<void>;
+  deleteProfile: (name: string) => Promise<void>;
+  unlinkKind: (kind: Kind) => Promise<void>;
+  query: string;
+  setQuery: (q: string) => void;
+  notice: string;
+  setNotice: (msg: string) => void;
+  dialog: DialogKind | null;
+  setDialog: (d: DialogKind | null) => void;
+};
+
+const AGENT_KEY = "harness:agent";
+
+function savedAgent(): Agent {
+  try {
+    const v = localStorage.getItem(AGENT_KEY);
+    if (v === "claude" || v === "codex") return v;
+  } catch {
+    /* storage unavailable */
+  }
+  return "claude";
 }
 
-function useHarnessState() {
-  const [skills, setSkills] = useSavedState("skills", initialSkills);
-  const [hooks, setHooks] = useSavedState("hooks", initialHooks);
-  const [profileName, setProfileName] = useSavedState("profile", profiles[0].name);
-  const activeProfile = profiles.find((p) => p.name === profileName) ?? profiles[0];
-  const [targets, setTargets] = useSavedState("targets", initialTargets);
-  const [root, setRoot] = useSavedState("root", "~/work/acme-app");
-  const [vault, setVault] = useSavedState("vault", "~/.agent/skills");
-  const [autoSync, setAutoSync] = useSavedState("autoSync", true);
-  const [strictMode, setStrictMode] = useSavedState("strictMode", true);
+function useHarnessState(): HarnessContextValue {
+  const [agent, setAgentState] = useState<Agent>(savedAgent);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const agentRef = useRef(agent);
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
+
   const [query, setQuery] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeState] = useState("");
   const [dialog, setDialog] = useState<DialogKind | null>(null);
-  const [audit, setAudit] = useState([
-    "LINK_CREATE  tailwind-v4-expert.md → .cursor/rules/tailwind.mdc",
-    "PROFILE_SELECT  Frontend Specialist (+5 skills, -2 hooks)",
-    "CONFLICT_WARN  jest-runner superseded by vitest-agent",
-    "FS_WATCHER  Initial tree scan completed for 4 targets",
-  ]);
-  const linked = skills.filter((s) => s.enabled && s.status === "Mounted").length;
-  const broken = skills.filter((s) => s.status === "Broken").length;
-  const enabledHooks = hooks.filter((h) => h.enabled).length;
+
+  const setNotice = useCallback((msg: string) => {
+    setNoticeState(msg);
+    if (msg) {
+      const id = setTimeout(() => setNoticeState(""), 4000);
+      return () => clearTimeout(id);
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const requested = agent;
+    setLoading(true);
+    setError(null);
+    try {
+      const ov = await agentApi.overview(requested);
+      if (agentRef.current === requested) setOverview(ov);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [agent]);
 
   useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(""), 4000);
-    return () => clearTimeout(timer);
-  }, [notice]);
+    void refresh();
+  }, [refresh]);
 
-  function chooseProfile(name: string) {
-    setProfileName(name);
-    setSkills((previous) =>
-      applyProfile(
-        previous,
-        profiles.findIndex((profile) => profile.name === name),
-      ),
-    );
-    setNotice(`Preview profile selected: ${name}`);
-    setAudit((previous) => [`PROFILE_SELECT  ${name}`, ...previous].slice(0, 6));
-  }
-  function toggleSkill(id: string, enabled: boolean) {
-    setSkills((previous) =>
-      previous.map((skill) => (skill.id === id ? setSkillEnabled(skill, enabled) : skill)),
-    );
-  }
-  function rescan() {
-    setNotice(
-      `Demo scan: ${skills.length} definitions, ${broken} broken target. Filesystem is not connected.`,
-    );
-  }
+  const setAgent = useCallback((next: Agent) => {
+    try {
+      localStorage.setItem(AGENT_KEY, next);
+    } catch {
+      /* ignore */
+    }
+    setAgentState(next);
+    setOverview(null);
+  }, []);
+
+  const mutate = useCallback(
+    async (action: () => Promise<void>) => {
+      const requested = agent;
+      setLoading(true);
+      setError(null);
+      try {
+        await action();
+        const ov = await agentApi.overview(requested);
+        if (agentRef.current === requested) setOverview(ov);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [agent],
+  );
+
+  const adopt = useCallback(() => mutate(() => agentApi.adopt(agent)), [agent, mutate]);
+  const importUnmanaged = useCallback(
+    () => mutate(() => agentApi.importUnmanaged(agent)),
+    [agent, mutate],
+  );
+  const saveProfile = useCallback(
+    (profile: Profile) => mutate(() => agentApi.saveProfile(agent, profile)),
+    [agent, mutate],
+  );
+  const activateProfile = useCallback(
+    (name: string) => mutate(() => agentApi.activateProfile(agent, name)),
+    [agent, mutate],
+  );
+  const deleteProfile = useCallback(
+    (name: string) => mutate(() => agentApi.deleteProfile(agent, name)),
+    [agent, mutate],
+  );
+  const unlinkKind = useCallback(
+    (kind: Kind) => mutate(() => agentApi.unlinkKind(agent, kind)),
+    [agent, mutate],
+  );
 
   return {
-    skills,
-    setSkills,
-    hooks,
-    setHooks,
-    targets,
-    setTargets,
-    activeProfile,
-    root,
-    setRoot,
-    vault,
-    setVault,
-    autoSync,
-    setAutoSync,
-    strictMode,
-    setStrictMode,
+    agent,
+    setAgent,
+    overview,
+    loading,
+    error,
+    refresh,
+    adopt,
+    importUnmanaged,
+    saveProfile,
+    activateProfile,
+    deleteProfile,
+    unlinkKind,
     query,
     setQuery,
     notice,
     setNotice,
     dialog,
     setDialog,
-    audit,
-    linked,
-    broken,
-    enabledHooks,
-    chooseProfile,
-    toggleSkill,
-    rescan,
   };
 }
 
-const HarnessContext = createContext<ReturnType<typeof useHarnessState> | null>(null);
+const HarnessContext = createContext<HarnessContextValue | null>(null);
 
 export function HarnessProvider({ children }: { children: ReactNode }) {
   return <HarnessContext.Provider value={useHarnessState()}>{children}</HarnessContext.Provider>;

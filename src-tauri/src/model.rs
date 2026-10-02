@@ -64,6 +64,22 @@ pub struct KindStatus {
     pub unmanaged: Vec<String>,
 }
 
+/// Hook 1 件に付随するメタデータ。フィールドはすべて省略可能で、未設定の場合は None。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HookMeta {
+    /// トリガーするイベント種別 (例: "PreToolUse", "PostToolUse", "PreCompact")
+    pub event: Option<String>,
+    /// 実行ランタイム (例: "bash", "python3")
+    pub runtime: Option<String>,
+    /// タイムアウト秒数
+    pub timeout: Option<u32>,
+    /// 同一イベント内での実行順
+    pub order: Option<i32>,
+    /// 人が読む説明文
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Overview {
