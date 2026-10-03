@@ -64,6 +64,14 @@ pub fn activate_profile(layout: &Layout, name: &str) -> Result<(), SymlinkError>
     commit(layout, &profile_ops::activate(&state, name)?)
 }
 
+/// 有効な Profile に合わせて全 Kind のリンクを書き直す。状態は保存しない。
+pub fn reconcile(layout: &Layout) -> Result<(), SymlinkError> {
+    let state = require_state(layout)?;
+    let active = profile_ops::active_profile(&state)?;
+    check_link_targets(layout, active)?;
+    write_links(layout, active)
+}
+
 pub fn unlink_kind(layout: &Layout, kind: Kind) -> Result<(), SymlinkError> {
     crate::reconcile::remove_owned_links(layout, kind)
 }
