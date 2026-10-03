@@ -1,0 +1,21 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: vp check
+      glob: "*.{ts,tsx,js,jsx,css,json,md,yml,yaml}"
+      run: vp check --no-error-on-unmatched-pattern {staged_files}
+    - name: cargo fmt
+      glob: "src-tauri/**/*.rs"
+      run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: vp check
+      run: vp check
+    - name: vp test
+      run: vp test
+    - name: cargo clippy
+      run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+    - name: cargo test
+      run: cargo test --manifest-path src-tauri/Cargo.toml
