@@ -9,8 +9,8 @@ use crate::import::{check_importable, move_to_library};
 use crate::inspect::{library, unmanaged_items};
 use crate::layout::Layout;
 use crate::model::{Profile, State};
-use crate::reconcile::{check_link_targets, check_set_items, write_links};
 use crate::profile_ops;
+use crate::reconcile::{check_link_targets, check_set_items, write_links};
 use crate::state_repo::{load_state, require_state, save_state};
 
 fn commit(layout: &Layout, state: &State) -> Result<(), SymlinkError> {
@@ -406,7 +406,10 @@ mod tests {
     fn import_unmanaged_refuses_a_name_collision_and_moves_nothing() {
         let (tmp, layout) = fixture(Agent::Claude);
         put_library(&layout, Kind::Skills, "a");
-        put_state(&layout, &profile_ops::default_state(library(&layout).unwrap()));
+        put_state(
+            &layout,
+            &profile_ops::default_state(library(&layout).unwrap()),
+        );
         write(&tmp.path().join(".claude/skills/a/other.md"));
         write(&tmp.path().join(".claude/skills/b/SKILL.md"));
 
