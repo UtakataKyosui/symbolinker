@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "ci-score": {
+      "source": "starslingdev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ci-score/SKILL.md",
+      "computedHash": "bfa1bb47d374139cead673c4910901a4216e2ebf9c9ad2fe2ac95c3da0dd8ef5"
+    },
+    "ci-secure": {
+      "source": "starslingdev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ci-secure/SKILL.md",
+      "computedHash": "70651d920d97a287af47c2e72b677b18fab13279882f383e3f186fa437446b8e"
+    },
+    "ci-speedup": {
+      "source": "starslingdev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ci-speedup/SKILL.md",
+      "computedHash": "83a8b0f1a546e58fd150058389f2101575044dab807d10a7616f8f9b3449ca74"
+    },
+    "sling": {
+      "source": "starslingdev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/sling/SKILL.md",
+      "computedHash": "f82bde96bc7eeb2074d9db8adb94e9774f1e5bc0ad5608750a4d6b6855809454"
+    }
+  }
+}
