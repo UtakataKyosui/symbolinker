@@ -31,6 +31,26 @@ pub enum SymlinkError {
     Io(#[from] io::Error),
 }
 
+impl SymlinkError {
+    /// CLI の終了コード。3 はドメイン上の拒否、4 は環境・ストレージの障害。
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            SymlinkError::HomeDirNotFound
+            | SymlinkError::AppDataDir(_)
+            | SymlinkError::Json(_)
+            | SymlinkError::Io(_) => 4,
+            SymlinkError::InvalidName(_)
+            | SymlinkError::AlreadyExists(_)
+            | SymlinkError::ForeignLink(_)
+            | SymlinkError::ItemNotFound(_)
+            | SymlinkError::ProfileNotFound(_)
+            | SymlinkError::ProfileIsActive(_)
+            | SymlinkError::AlreadyAdopted
+            | SymlinkError::NotAdopted => 3,
+        }
+    }
+}
+
 impl Serialize for SymlinkError {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.to_string())

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+default-run = "symlinker"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,6 +14,14 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "symlinker_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "symlinker"
+path = "src/main.rs"
+
+[[bin]]
+name = "symlinker-cli"
+path = "src/bin/symlinker-cli.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -27,6 +36,7 @@ tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta-typescript = "0.0.12"
 thiserror = "2.0.21"
 dirs = "7.0.0"
+clap = { version = "4", features = ["derive"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

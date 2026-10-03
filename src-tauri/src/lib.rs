@@ -1,15 +1,16 @@
-mod agent;
+pub mod agent;
+pub mod cli;
 mod commands;
-mod error;
+pub mod error;
 mod fsops;
-mod hook_meta;
+pub mod hook_meta;
 mod import;
-mod inspect;
-mod layout;
-mod model;
-mod reconcile;
-mod service;
+pub mod inspect;
+pub mod layout;
+pub mod model;
 mod profile_ops;
+mod reconcile;
+pub mod service;
 mod state_repo;
 #[cfg(all(test, unix))]
 mod testutil;
