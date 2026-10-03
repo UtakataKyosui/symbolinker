@@ -130,12 +130,21 @@ fn layout_for(cli: &Cli) -> Result<Layout, SymlinkError> {
             .join("managed")
             .join(cli.agent.slug()),
     };
-    Ok(Layout::new(cli.agent, config_dir, root))
+    Ok(Layout::new(
+        cli.agent,
+        std::path::absolute(config_dir)?,
+        std::path::absolute(root)?,
+    ))
 }
 
 fn read_json<T: DeserializeOwned>(file: &PathBuf) -> Result<T, Failure> {
-    let text = fs::read_to_string(file)
-        .map_err(|err| usage_failure(format!("{} を読めません: {err}", file.display())))?;
+    let text = fs::read_to_string(file).map_err(|err| {
+        let failure = Failure::from(SymlinkError::from(err));
+        Failure {
+            message: format!("{} を読めません: {}", file.display(), failure.message),
+            ..failure
+        }
+    })?;
     serde_json::from_str(&text)
         .map_err(|err| usage_failure(format!("{} の JSON が不正です: {err}", file.display())))
 }
@@ -252,6 +261,17 @@ fn execute(cli: &Cli) -> Result<String, Failure> {
     }
 }
 
+fn write_stdout(text: &str, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+    match out.write_all(text.as_bytes()).and_then(|()| out.flush()) {
+        Ok(()) => 0,
+        Err(error) => {
+            let failure = Failure::from(SymlinkError::from(error));
+            let _ = writeln!(err, "{}", failure.message);
+            failure.code
+        }
+    }
+}
+
 /// CLI を実行して終了コードを返す。出力は `out` / `err` に書く。
 pub fn run<I, T>(args: I, out: &mut dyn Write, err: &mut dyn Write) -> i32
 where
@@ -261,17 +281,15 @@ where
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(e) => {
-            let code = if e.use_stderr() { 2 } else { 0 };
-            let target: &mut dyn Write = if code == 0 { out } else { err };
-            let _ = write!(target, "{e}");
-            return code;
+            if !e.use_stderr() {
+                return write_stdout(&e.to_string(), out, err);
+            }
+            let _ = write!(err, "{e}");
+            return 2;
         }
     };
     match execute(&cli) {
-        Ok(text) => {
-            let _ = writeln!(out, "{text}");
-            0
-        }
+        Ok(text) => write_stdout(&format!("{text}\n"), out, err),
         Err(failure) => {
             let _ = writeln!(err, "{}", failure.message);
             failure.code
@@ -280,7 +298,11 @@ where
 }
 
 pub fn main_with_env() -> i32 {
-    run(std::env::args_os(), &mut std::io::stdout(), &mut std::io::stderr())
+    run(
+        std::env::args_os(),
+        &mut std::io::stdout(),
+        &mut std::io::stderr(),
+    )
 }
 
 #[cfg(all(test, unix))]
@@ -392,6 +414,103 @@ mod tests {
         let file = write_file(&env.tmp.path().join("bad.json"), "{");
         assert_eq!(env.run(&["profile", "save", "--file", &file]).0, 2);
         assert_eq!(env.run(&["hook-meta", "save", "h", "--file", &file]).0, 2);
+    }
+
+    #[test]
+    fn input_file_io_errors_exit_with_4() {
+        let env = Env::new();
+        for file in [
+            env.tmp.path().to_path_buf(),
+            env.tmp.path().join("missing.json"),
+        ] {
+            for command in [vec!["profile", "save"], vec!["hook-meta", "save", "h"]] {
+                let mut args = command;
+                let file = file.to_str().unwrap();
+                args.extend(["--file", file]);
+                let (code, out, err) = env.run(&args);
+                assert_eq!(code, 4);
+                assert!(out.is_empty());
+                assert!(!err.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn stdout_write_and_flush_errors_exit_with_4() {
+        struct FailingOutput {
+            fail_on_flush: bool,
+        }
+        impl Write for FailingOutput {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                if self.fail_on_flush {
+                    Ok(bytes.len())
+                } else {
+                    Err(std::io::ErrorKind::BrokenPipe.into())
+                }
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::ErrorKind::BrokenPipe.into())
+            }
+        }
+
+        let env = Env::new();
+        for command in ["overview", "--help"] {
+            for fail_on_flush in [false, true] {
+                let mut out = FailingOutput { fail_on_flush };
+                let mut err = Vec::new();
+                let code = run(
+                    [
+                        "symlinker-cli",
+                        "--agent",
+                        "claude",
+                        "--config-dir",
+                        env.tmp.path().to_str().unwrap(),
+                        "--root",
+                        env.tmp.path().to_str().unwrap(),
+                        "--json",
+                        command,
+                    ],
+                    &mut out,
+                    &mut err,
+                );
+                assert_eq!(code, 4);
+                assert!(!err.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn relative_paths_keep_links_working_after_adopt_and_reconcile() {
+        let env = Env {
+            tmp: tempfile::tempdir_in(".").unwrap(),
+        };
+        let relative = PathBuf::from(env.tmp.path().file_name().unwrap());
+        let config = relative.join(".claude");
+        let root = relative.join("managed");
+        let run_command = |command: &str, kind: Option<&str>| {
+            let mut args = vec![
+                "symlinker-cli",
+                "--agent",
+                "claude",
+                "--config-dir",
+                config.to_str().unwrap(),
+                "--root",
+                root.to_str().unwrap(),
+                command,
+            ];
+            args.extend(kind);
+            run(args, &mut Vec::new(), &mut Vec::new())
+        };
+        env.put_skill("alpha");
+        assert_eq!(run_command("adopt", None), 0);
+        let link = env.config().join("skills/alpha");
+        assert!(fs::read_link(&link).unwrap().is_absolute());
+        assert_eq!(fs::read_to_string(link.join("SKILL.md")).unwrap(), "x");
+        assert_eq!(run_command("unlink", Some("skills")), 0);
+        assert!(!link.is_symlink());
+        assert_eq!(run_command("reconcile", None), 0);
+        assert_eq!(fs::read_to_string(link.join("SKILL.md")).unwrap(), "x");
     }
 
     #[test]
