@@ -279,23 +279,58 @@ svg {
   gap: 17px;
   min-width: 0;
 }
-.window-lights {
+.agent-selector {
   display: flex;
-  gap: 6px;
-  padding-right: 15px;
-  border-right: 1px solid #222838;
+  gap: 4px;
+  padding: 3px;
+  background: #111622;
+  border: 1px solid #222838;
+  border-radius: 6px;
 }
-.window-lights i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ff5f56;
+.agent-tab {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
 }
-.window-lights i:nth-child(2) {
-  background: #ffbd2e;
+.agent-tab:hover {
+  color: #e2e8f0;
 }
-.window-lights i:nth-child(3) {
-  background: #00d6e5;
+.agent-tab-active {
+  color: #00e5f5;
+  background: #181e2b;
+}
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border: 1px solid #222838;
+  border-radius: 6px;
+  background: #111622;
+}
+.banner > span {
+  flex: 1;
+  min-width: 0;
+}
+.banner > button {
+  flex-shrink: 0;
+}
+.banner-warn {
+  border-color: #ffbd2e66;
+}
+.banner-error {
+  border-color: #ff5f5666;
+}
+.banner-info {
+  border-color: #00e5f566;
 }
 .brand {
   display: flex;
@@ -1578,7 +1613,6 @@ h1 {
   .titlebar-left {
     gap: 10px;
   }
-  .window-lights,
   .brand code,
   .avatar {
     display: none;

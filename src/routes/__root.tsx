@@ -149,11 +149,6 @@ function AppShell() {
           >
             <Menu />
           </Button>
-          <div className="window-lights" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </div>
           <div className="brand">
             <Workflow />
             <span>SymlinkHarness</span>
