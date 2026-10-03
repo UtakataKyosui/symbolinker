@@ -10,3 +10,5 @@ peerDependencyRules:
     vite: "*"
 minimumReleaseAgeExclude:
   - "@google/stitch"
+allowBuilds:
+  lefthook: true
