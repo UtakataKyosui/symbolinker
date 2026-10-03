@@ -71,7 +71,23 @@ jobs:
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: "symlinker v__VERSION__"
-          releaseBody: "See the assets to download this version and install."
+          releaseBody: |
+            ダウンロードして展開・インストールしてください。
+
+            このリリースはコード署名・公証をしていないため、初回起動時に OS の警告が出ます。
+
+            **macOS** (Apple Silicon: `aarch64.dmg` / Intel: `x64.dmg`)
+            1. dmg を開き、`symlinker.app` を `Applications` へドラッグします。
+            2. Finder で `symlinker.app` を右クリックして「開く」を選び、ダイアログでもう一度「開く」を押します。
+            3. 「壊れているため開けません」と出る場合は `xattr -dr com.apple.quarantine /Applications/symlinker.app` を実行します。
+
+            **Windows** (`x64-setup.exe` / `x64_en-US.msi`)
+            SmartScreen が出たら「詳細情報」→「実行」を選びます。
+
+            **Linux**
+            AppImage は `chmod +x` してから起動します。deb / rpm は `sudo apt install ./symlinker_*.deb` / `sudo dnf install ./symlinker-*.rpm` で入れます。
+
+            詳細は [README](https://github.com/UtakataKyosui/symbolinker#インストール) を参照してください。
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
