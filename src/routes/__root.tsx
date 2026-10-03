@@ -34,6 +34,7 @@ import { UIStateProvider, useUIState } from "@/lib/ui-state-context";
 import { useOverview } from "@/lib/use-overview";
 import { events } from "@/bindings";
 import type { Agent } from "@/bindings";
+import pkg from "../../package.json";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -152,7 +153,7 @@ function AppShell() {
           <div className="brand">
             <Workflow />
             <span>SymlinkHarness</span>
-            <code>v1.4.0</code>
+            <code>v{pkg.version}</code>
           </div>
           <div className="agent-selector">
             {(["claude", "codex"] as Agent[]).map((a) => (
