@@ -17,7 +17,10 @@ use crate::{hook_meta, inspect, service};
 const APP_IDENTIFIER: &str = "com.taikiamo.symlinker";
 
 #[derive(Debug, Parser)]
-#[command(name = "symlinker-cli", about = "Agent の Harness を管理するヘッドレス CLI")]
+#[command(
+    name = "symlinker-cli",
+    about = "Agent の Harness を管理するヘッドレス CLI"
+)]
 struct Cli {
     /// 対象の Agent (claude / codex)
     #[arg(long, value_parser = parse_agent)]
@@ -154,7 +157,11 @@ fn to_json<T: Serialize>(value: &T) -> Result<String, Failure> {
 }
 
 /// `json` なら JSON 1 値、そうでなければ `human` を返す。
-fn render<T: Serialize>(json: bool, value: &T, human: impl FnOnce() -> String) -> Result<String, Failure> {
+fn render<T: Serialize>(
+    json: bool,
+    value: &T,
+    human: impl FnOnce() -> String,
+) -> Result<String, Failure> {
     if json {
         to_json(value)
     } else {
@@ -180,17 +187,34 @@ fn names(items: &[String]) -> String {
 
 fn format_overview(overview: &Overview) -> String {
     let mut lines = vec![format!("adopted: {}", overview.adopted)];
-    lines.push(format!("active: {}", overview.active.as_deref().unwrap_or("-")));
+    lines.push(format!(
+        "active: {}",
+        overview.active.as_deref().unwrap_or("-")
+    ));
     lines.push(format!(
         "profiles: {}",
-        names(&overview.profiles.iter().map(|p| p.name.clone()).collect::<Vec<_>>())
+        names(
+            &overview
+                .profiles
+                .iter()
+                .map(|p| p.name.clone())
+                .collect::<Vec<_>>()
+        )
     ));
     for kind in Kind::ALL {
-        lines.push(format!("library/{}: {}", kind.dir_name(), names(overview.library.get(kind))));
+        lines.push(format!(
+            "library/{}: {}",
+            kind.dir_name(),
+            names(overview.library.get(kind))
+        ));
     }
     for status in &overview.links {
         let dir = status.kind.dir_name();
-        let note = if status.dir_is_symlink { " (dir is symlink)" } else { "" };
+        let note = if status.dir_is_symlink {
+            " (dir is symlink)"
+        } else {
+            ""
+        };
         lines.push(format!("{dir}{note}:"));
         lines.push(format!("  linked: {}", names(&status.linked)));
         lines.push(format!("  system: {}", names(&status.system)));
@@ -237,7 +261,10 @@ fn execute(cli: &Cli) -> Result<String, Failure> {
         }
         Command::Unlink { kind } => {
             service::unlink_kind(&layout, *kind)?;
-            Ok(done(json, &format!("{} のリンクを外しました", kind.dir_name())))
+            Ok(done(
+                json,
+                &format!("{} のリンクを外しました", kind.dir_name()),
+            ))
         }
         Command::Profile(ProfileCommand::Save { file }) => {
             let profile: Profile = read_json(file)?;
@@ -316,7 +343,9 @@ mod tests {
 
     impl Env {
         fn new() -> Self {
-            Env { tmp: tempfile::tempdir().unwrap() }
+            Env {
+                tmp: tempfile::tempdir().unwrap(),
+            }
         }
 
         fn config(&self) -> PathBuf {
@@ -336,7 +365,11 @@ mod tests {
             args.extend(extra.iter().map(|s| s.to_string()));
             let (mut out, mut err) = (Vec::new(), Vec::new());
             let code = run(args, &mut out, &mut err);
-            (code, String::from_utf8(out).unwrap(), String::from_utf8(err).unwrap())
+            (
+                code,
+                String::from_utf8(out).unwrap(),
+                String::from_utf8(err).unwrap(),
+            )
         }
 
         fn put_skill(&self, name: &str) {
@@ -385,9 +418,20 @@ mod tests {
     fn usage_errors_exit_with_2() {
         let env = Env::new();
         assert_eq!(env.run(&["unlink", "bogus"]).0, 2);
-        assert_eq!(run(["symlinker-cli", "overview"], &mut Vec::new(), &mut Vec::new()), 2);
         assert_eq!(
-            run(["symlinker-cli", "--agent", "gemini", "overview"], &mut Vec::new(), &mut Vec::new()),
+            run(
+                ["symlinker-cli", "overview"],
+                &mut Vec::new(),
+                &mut Vec::new()
+            ),
+            2
+        );
+        assert_eq!(
+            run(
+                ["symlinker-cli", "--agent", "gemini", "overview"],
+                &mut Vec::new(),
+                &mut Vec::new()
+            ),
             2
         );
     }
@@ -520,7 +564,10 @@ mod tests {
         assert_eq!(code, 0);
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(value["event"].is_null());
-        let file = write_file(&env.tmp.path().join("m.json"), r#"{"event":"PreToolUse","timeout":5}"#);
+        let file = write_file(
+            &env.tmp.path().join("m.json"),
+            r#"{"event":"PreToolUse","timeout":5}"#,
+        );
         assert_eq!(env.run(&["hook-meta", "save", "h", "--file", &file]).0, 0);
         let (_, out, _) = env.run(&["--json", "hook-meta", "get", "h"]);
         let value: serde_json::Value = serde_json::from_str(&out).unwrap();

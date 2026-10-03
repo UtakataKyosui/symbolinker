@@ -42,7 +42,11 @@ pub fn import_unmanaged(app: tauri::AppHandle, agent: Agent) -> Result<(), Symli
 
 #[tauri::command]
 #[specta::specta]
-pub fn save_profile(app: tauri::AppHandle, agent: Agent, profile: Profile) -> Result<(), SymlinkError> {
+pub fn save_profile(
+    app: tauri::AppHandle,
+    agent: Agent,
+    profile: Profile,
+) -> Result<(), SymlinkError> {
     service::save_profile(&layout_for(&app, agent)?, profile)?;
     OverviewChanged { agent }.emit(&app).ok();
     Ok(())
@@ -50,7 +54,11 @@ pub fn save_profile(app: tauri::AppHandle, agent: Agent, profile: Profile) -> Re
 
 #[tauri::command]
 #[specta::specta]
-pub fn delete_profile(app: tauri::AppHandle, agent: Agent, name: String) -> Result<(), SymlinkError> {
+pub fn delete_profile(
+    app: tauri::AppHandle,
+    agent: Agent,
+    name: String,
+) -> Result<(), SymlinkError> {
     service::delete_profile(&layout_for(&app, agent)?, &name)?;
     OverviewChanged { agent }.emit(&app).ok();
     Ok(())
@@ -58,7 +66,11 @@ pub fn delete_profile(app: tauri::AppHandle, agent: Agent, name: String) -> Resu
 
 #[tauri::command]
 #[specta::specta]
-pub fn activate_profile(app: tauri::AppHandle, agent: Agent, name: String) -> Result<(), SymlinkError> {
+pub fn activate_profile(
+    app: tauri::AppHandle,
+    agent: Agent,
+    name: String,
+) -> Result<(), SymlinkError> {
     service::activate_profile(&layout_for(&app, agent)?, &name)?;
     OverviewChanged { agent }.emit(&app).ok();
     Ok(())
@@ -74,12 +86,21 @@ pub fn unlink_kind(app: tauri::AppHandle, agent: Agent, kind: Kind) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_hook_meta(app: tauri::AppHandle, agent: Agent, name: String) -> Result<HookMeta, SymlinkError> {
+pub fn get_hook_meta(
+    app: tauri::AppHandle,
+    agent: Agent,
+    name: String,
+) -> Result<HookMeta, SymlinkError> {
     hook_meta::load(&layout_for(&app, agent)?, &name)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn save_hook_meta(app: tauri::AppHandle, agent: Agent, name: String, meta: HookMeta) -> Result<(), SymlinkError> {
+pub fn save_hook_meta(
+    app: tauri::AppHandle,
+    agent: Agent,
+    name: String,
+    meta: HookMeta,
+) -> Result<(), SymlinkError> {
     hook_meta::save(&layout_for(&app, agent)?, &name, &meta)
 }

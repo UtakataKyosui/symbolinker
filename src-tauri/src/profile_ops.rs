@@ -1,7 +1,7 @@
 //! Profile(状態)に対する純粋な変換。I/O をせず、入力を変更せず、新しい `State` を返す。
 use crate::agent::Kind;
 use crate::error::SymlinkError;
-use crate::model::{Profile, Items, State};
+use crate::model::{Items, Profile, State};
 
 pub const DEFAULT_PROFILE: &str = "default";
 
