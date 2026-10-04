@@ -32,11 +32,50 @@ macOS 15 以降で右クリックから開けない場合は、「システム�
 - Debian / Ubuntu: `sudo apt install ./symlinker_*.deb`
 - Fedora / RHEL: `sudo dnf install ./symlinker-*.rpm`
 
-## UI preview
+## CLI の起動と運用
+
+CLI は GUI とは別の `symlinker-cli` 実行ファイルです。現在のリリース設定には CLI の配布・PATH 登録がないため、ソースからビルドして利用します。Rust と、このリポジトリの Tauri ビルド環境が必要です。
+
+リポジトリのルートで、まずヘルプを表示します。
+
+```sh
+cargo run --manifest-path src-tauri/Cargo.toml --bin symlinker-cli -- --help
+cargo run --manifest-path src-tauri/Cargo.toml --bin symlinker-cli -- --agent claude overview
+```
+
+日常利用では以下でインストールします。`~/.cargo/bin` が PATH に入っていれば、任意のディレクトリから呼び出せます。
+
+```sh
+cargo install --path src-tauri --bin symlinker-cli --locked
+symlinker-cli --agent claude overview
+symlinker-cli --agent codex --json overview
+```
+
+`overview` は状態確認です。未 Adopt の Agent は `adopt` で管理を開始し、以後は `activate` で既存の Profile を切り替えます。GUI で Adopt 済みなら、CLI で再度 Adopt する必要はありません。
+
+```sh
+# Unmanaged Item の実体を Library へ移し、default Profile を有効化
+symlinker-cli --agent claude adopt
+
+# 保存済み Profile へ切り替え（Agent 側のリンクを変更）
+symlinker-cli --agent claude activate work
+
+# 後から追加した Unmanaged Item を Library と Active Profile に取り込む
+symlinker-cli --agent claude import
+
+# Active Profile に合わせてリンクを復元
+symlinker-cli --agent claude reconcile
+```
+
+GUI と CLI は同じ Library・State を使います。macOS の管理ルートは `~/Library/Application Support/com.taikiamo.symlinker/managed/<agent>`、Agent 側は `~/.claude` または `~/.codex` です。CLI 操作後は GUI の Refresh で再読み込みしてください。
+
+検証用の別ディレクトリを使う場合は `--config-dir` と `--root` の両方を指定します。`--agent`、`--json` などの共通オプションはサブコマンドより前に置きます。その他の操作は `symlinker-cli --help` と各サブコマンドの `--help` で確認できます。
+
+## GUI の開発起動
 
 Stitchの「AI Harness Switcher」デザインをもとに、React 19とshadcn/uiでDashboard、Skills、Hooks、Profiles、Symlink Inspector、Workspace Settingsを実装しています。デザインの参照先と配色は[DESIGN.md](./DESIGN.md)に記載しています。
 
-`vp run dev`で起動し、`http://localhost:1420`で表示できます。検索、プロフィール切り替え、マトリクス編集、スキルの有効化、フックのシミュレーション、JSONエクスポートに対応しています。設定はブラウザ内に保存されます。ファイルシステム操作とフックの実行はバックエンド未接続のためプレビューです。
+`vp install` の後、`vp run tauri dev` でバックエンドを含むデスクトップアプリを起動します。`vp run dev` は `http://localhost:1420` でフロントエンドのみを起動します。現在の UI は Tauri バックエンドに接続するため、通常のブラウザだけでは Library・Profile の取得やファイルシステム操作はできません。
 
 検証: `vp check src index.html DESIGN.md`、`vp test`、`vp run build`。
 

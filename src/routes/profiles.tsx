@@ -104,9 +104,10 @@ function ProfilesPage() {
                     <button
                       key={p.name}
                       className={`profile-tab ${editingName === p.name ? "profile-tab-active" : ""}`}
+                      aria-pressed={editingName === p.name}
                       onClick={() => setEditingName(p.name)}
                     >
-                      {p.name}
+                      <span className="min-w-0">{p.name}</span>
                       {active === p.name && <Status tone="cyan">Active</Status>}
                     </button>
                   ))}
