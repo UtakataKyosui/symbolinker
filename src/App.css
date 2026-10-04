@@ -441,6 +441,7 @@ svg {
   flex-direction: column;
   justify-content: space-between;
   z-index: 30;
+  overflow-y: auto;
 }
 .nav-group {
   margin-bottom: 23px;
@@ -635,6 +636,7 @@ h1 {
   color: #f59e0b;
 }
 .metric-value {
+  overflow-wrap: anywhere;
   margin-top: 14px;
   font-size: 27px;
   font-weight: 600;
@@ -898,6 +900,15 @@ h1 {
 .profile-card strong {
   font-size: 12px;
   font-weight: 550;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.profile-card .status {
+  flex-shrink: 0;
+}
+.profile-card .profile-meta {
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 .profile-card.is-active .status {
   background: #00dce9;
@@ -949,6 +960,13 @@ h1 {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+.detail-rows > div > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.detail-rows > div > :last-child {
+  text-align: right;
 }
 .detail-rows > div > span:first-child {
   color: #8b9bb1;
@@ -1376,6 +1394,56 @@ h1 {
 }
 .profiles-layout > .panel .panel-heading {
   padding: 0 16px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.profile-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 16px;
+  border-bottom: 1px solid #222838;
+}
+.profile-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #283246;
+  border-radius: 4px;
+  background: #111622;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.profile-tab .status {
+  flex-shrink: 0;
+}
+.profile-tab:hover,
+.profile-tab-active {
+  border-color: #00c7db;
+  background: #162330;
+}
+.profile-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.profile-selector + p {
+  padding: 16px;
+}
+.kind-section + .kind-section {
+  margin-top: 20px;
+}
+.kind-section > .section-label {
+  padding: 0 16px;
+}
+.kind-section:last-child {
+  padding-bottom: 16px;
 }
 .matrix-active {
   background: #00e5f507 !important;
@@ -1715,6 +1783,34 @@ h1 {
   .hooks-toolbar [data-slot="tabs-list"] {
     flex-wrap: wrap;
     height: auto;
+  }
+}
+@media (max-width: 540px) {
+  .titlebar {
+    height: 96px;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+  }
+  .titlebar-left,
+  .titlebar-right {
+    width: 100%;
+  }
+  .agent-selector {
+    margin-left: auto;
+  }
+  .global-search {
+    width: 100%;
+    min-width: 0;
+  }
+  .sidebar {
+    top: 96px;
+  }
+  .sidebar-backdrop {
+    top: 96px;
+  }
+  .main-stage {
+    padding-top: 112px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
